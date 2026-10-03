@@ -85,8 +85,69 @@ let trainingRecords = [];
 
 // Журнал расстановки
 let placementLog = [];
+
+// Состояние фильтров журнала расстановки
+let placementFilters = {
+  dateFrom: '',
+  dateTo: '',
+  operators: [],
+  posts: []
+};
+
+let placementFilterMenu = null;
+
+//Сортировка расстановки
+let placementSort = {
+  key: 'date',
+  direction: 'desc'
+};
+
+//Вызов данных руководителей
+let workshopChief = '';
+let sectionChief = '';
+
+//Вызов данных департамента, цеха, участка и смены
+let filterState = {
+  department: '',
+  workshop: '',
+  section: '',
+  shift: ''
+};
+
+const restoredState = loadState();
+
+//Восстановление фильтров департамент, цех, участок, смена
+function restoreSavedFilters() {
+  const filters = {
+    department: 'filterDepartment',
+    workshop: 'filterWorkshop',
+    section: 'filterSection',
+    shift: 'filterShift'
+  };
+
+  Object.entries(filters).forEach(([key, elementId]) => {
+    const element = document.getElementById(elementId);
+    const savedValue = filterState[key];
+
+    if (!element || !savedValue) return;
+
+    const optionExists = Array.from(element.options)
+      .some(option => option.value === savedValue);
+
+    if (optionExists) {
+      element.value = savedValue;
+    }
+  });
+}
+
+restoreSavedFilters();
 // Тестовые записи за прошлый месяц (апрель 2026)
 (function() {
+  if (restoredState) {
+    setTimeout(renderPlacementLog, 100);
+    return;
+  }
+
   const testLog = [];
   const ops = [...operators];
   const pts = [...posts];
@@ -114,6 +175,7 @@ let placementLog = [];
     }
   }
   placementLog = testLog;
+  saveState();
   // Отобразим сразу
   setTimeout(renderPlacementLog, 100);
 })();
@@ -411,6 +473,7 @@ function renderMatrix() {
 
   // Обновляем статистику в карточках
   updateStatsCard();
+  saveState();
 }
 
 // ======================== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ========================
@@ -420,20 +483,499 @@ function logPlacement(opName, postName) {
   const now = new Date();
   const date = now.toLocaleDateString('ru-RU');
   placementLog.push({ date, opName, postName });
+  saveState();
   renderPlacementLog();
+}
+
+//Сортировка журнала расстановки
+function getPlacementSortValue(entry, key) {
+  if (key === 'date') {
+    const parts = entry.date.split('.');
+
+    if (parts.length === 3) {
+      return new Date(
+        Number(parts[2]),
+        Number(parts[1]) - 1,
+        Number(parts[0])
+      ).getTime();
+    }
+
+    return 0;
+  }
+
+  return String(entry[key] || '')
+    .toLocaleLowerCase('ru-RU');
+}
+
+function sortPlacementLog(key) {
+  if (placementSort.key === key) {
+    placementSort.direction =
+      placementSort.direction === 'asc'
+        ? 'desc'
+        : 'asc';
+  } else {
+    placementSort.key = key;
+    placementSort.direction = 'asc';
+  }
+
+  renderPlacementLog();
+}
+
+function closePlacementFilterMenu(event) {
+  if (
+    event &&
+    placementFilterMenu &&
+    placementFilterMenu.contains(event.target)
+  ) {
+    return;
+  }
+
+  if (placementFilterMenu) {
+    placementFilterMenu.remove();
+    placementFilterMenu = null;
+  }
+}
+
+function placementDateToIso(value) {
+  const parts = String(value || '').split('.');
+
+  if (parts.length !== 3) {
+    return '';
+  }
+
+  return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+}
+
+function getFilteredPlacementLog() {
+  return placementLog.filter(entry => {
+    const date = placementDateToIso(entry.date);
+
+    if (
+      placementFilters.dateFrom &&
+      date < placementFilters.dateFrom
+    ) {
+      return false;
+    }
+
+    if (
+      placementFilters.dateTo &&
+      date > placementFilters.dateTo
+    ) {
+      return false;
+    }
+
+    if (
+      placementFilters.operators.length > 0 &&
+      !placementFilters.operators.includes(entry.opName)
+    ) {
+      return false;
+    }
+
+    if (
+      placementFilters.posts.length > 0 &&
+      !placementFilters.posts.includes(entry.postName)
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+//Поиск в журнале
+function openPlacementFilterMenu(event, type) {
+  event.stopPropagation();
+  closePlacementFilterMenu();
+
+  const menu = document.createElement('div');
+
+  placementFilterMenu = menu;
+  menu.addEventListener('click', event => {
+  event.stopPropagation();
+});
+  menu.className = 'placement-filter-menu';
+
+  menu.style.cssText = `
+    position: fixed;
+    z-index: 10001;
+    min-width: 260px;
+    max-height: 420px;
+    overflow-y: auto;
+    padding: 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 8px 24px rgba(0,0,0,.18);
+    font-family: Arial, sans-serif;
+  `;
+
+  const title = document.createElement('div');
+
+  title.textContent =
+    type === 'date'
+      ? 'Фильтр по дате'
+      : type === 'operator'
+        ? 'Фильтр по оператору'
+        : 'Фильтр по посту';
+
+  title.style.cssText = `
+    margin-bottom: 10px;
+    font-weight: 700;
+    color: #0f172a;
+  `;
+
+  menu.appendChild(title);
+
+  if (type === 'date') {
+    const fromLabel = document.createElement('label');
+    fromLabel.textContent = 'Дата от';
+    fromLabel.style.display = 'block';
+
+    const fromInput = document.createElement('input');
+    fromInput.type = 'date';
+    fromInput.value = placementFilters.dateFrom;
+
+    fromInput.style.cssText = `
+      width: 100%;
+      box-sizing: border-box;
+      margin: 4px 0 10px;
+      padding: 7px;
+    `;
+
+    const toLabel = document.createElement('label');
+    toLabel.textContent = 'Дата до';
+    toLabel.style.display = 'block';
+
+    const toInput = document.createElement('input');
+    toInput.type = 'date';
+    toInput.value = placementFilters.dateTo;
+
+    toInput.style.cssText = `
+      width: 100%;
+      box-sizing: border-box;
+      margin: 4px 0 12px;
+      padding: 7px;
+    `;
+
+    menu.appendChild(fromLabel);
+    menu.appendChild(fromInput);
+    menu.appendChild(toLabel);
+    menu.appendChild(toInput);
+
+    const buttons = createPlacementFilterButtons(
+      () => {
+        placementFilters.dateFrom = fromInput.value;
+        placementFilters.dateTo = toInput.value;
+        closePlacementFilterMenu();
+        renderPlacementLog();
+      },
+      () => {
+        placementFilters.dateFrom = '';
+        placementFilters.dateTo = '';
+        closePlacementFilterMenu();
+        renderPlacementLog();
+      }
+    );
+
+    menu.appendChild(buttons);
+  } else {
+    const values = [
+      ...new Set(
+        placementLog.map(entry =>
+          type === 'operator'
+            ? entry.opName
+            : entry.postName
+        )
+      )
+    ].sort((a, b) =>
+      a.localeCompare(b, 'ru')
+    );
+
+    const search = document.createElement('input');
+    search.type = 'search';
+    search.placeholder = 'Поиск...';
+
+    search.style.cssText = `
+      width: 100%;
+      box-sizing: border-box;
+      margin-bottom: 8px;
+      padding: 7px;
+    `;
+
+    const selectAllLabel = document.createElement('label');
+    selectAllLabel.style.display = 'block';
+    selectAllLabel.style.marginBottom = '8px';
+
+    const selectAll = document.createElement('input');
+    selectAll.type = 'checkbox';
+    selectAll.checked = true;
+
+    selectAllLabel.appendChild(selectAll);
+    selectAllLabel.appendChild(
+      document.createTextNode(' Выбрать всё')
+    );
+
+    const valuesContainer = document.createElement('div');
+
+    valuesContainer.style.cssText = `
+      max-height: 230px;
+      overflow-y: auto;
+      margin-bottom: 12px;
+    `;
+
+    const checkboxes = [];
+
+    values.forEach(value => {
+      const label = document.createElement('label');
+
+      label.style.cssText = `
+        display: block;
+        padding: 4px 0;
+        cursor: pointer;
+      `;
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = value;
+
+      const selectedValues =
+        type === 'operator'
+          ? placementFilters.operators
+          : placementFilters.posts;
+
+      checkbox.checked =
+        selectedValues.length === 0 ||
+        selectedValues.includes(value);
+
+      label.appendChild(checkbox);
+      label.appendChild(
+        document.createTextNode(` ${value}`)
+      );
+
+      valuesContainer.appendChild(label);
+      checkboxes.push({ checkbox, label });
+    });
+
+    selectAll.addEventListener('change', () => {
+      checkboxes.forEach(item => {
+        item.checkbox.checked = selectAll.checked;
+      });
+    });
+
+    search.addEventListener('input', () => {
+      const query = search.value.toLocaleLowerCase('ru');
+
+      checkboxes.forEach(item => {
+        const visible =
+          item.checkbox.value
+            .toLocaleLowerCase('ru')
+            .includes(query);
+
+        item.label.style.display =
+          visible ? 'block' : 'none';
+      });
+    });
+
+    menu.appendChild(search);
+    menu.appendChild(selectAllLabel);
+    menu.appendChild(valuesContainer);
+
+    const buttons = createPlacementFilterButtons(
+      () => {
+        const selected = checkboxes
+          .filter(item => item.checkbox.checked)
+          .map(item => item.checkbox.value);
+
+        if (type === 'operator') {
+          placementFilters.operators = selected;
+        } else {
+          placementFilters.posts = selected;
+        }
+
+        closePlacementFilterMenu();
+        renderPlacementLog();
+      },
+      () => {
+        if (type === 'operator') {
+          placementFilters.operators = [];
+        } else {
+          placementFilters.posts = [];
+        }
+
+        closePlacementFilterMenu();
+        renderPlacementLog();
+      }
+    );
+
+    menu.appendChild(buttons);
+  }
+
+  document.body.appendChild(menu);
+
+  const rect =
+    event.currentTarget.getBoundingClientRect();
+
+  let left = rect.left;
+  let top = rect.bottom + 5;
+
+  if (left + 280 > window.innerWidth) {
+    left = window.innerWidth - 290;
+  }
+
+  if (top + 420 > window.innerHeight) {
+    top = rect.top - 425;
+  }
+
+  menu.style.left = `${Math.max(8, left)}px`;
+  menu.style.top = `${Math.max(8, top)}px`;
+
+  setTimeout(() => {
+    document.addEventListener(
+      'click',
+      closePlacementFilterMenu,
+      { once: true }
+    );
+  }, 0);
+}
+
+function createPlacementFilterButtons(
+  applyHandler,
+  resetHandler
+) {
+  const container = document.createElement('div');
+
+  container.style.cssText = `
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+  `;
+
+  const applyButton = document.createElement('button');
+  applyButton.type = 'button';
+  applyButton.textContent = 'Применить';
+  applyButton.onclick = applyHandler;
+
+  const resetButton = document.createElement('button');
+  resetButton.type = 'button';
+  resetButton.textContent = 'Сбросить';
+  resetButton.onclick = resetHandler;
+
+  [applyButton, resetButton].forEach(button => {
+    button.style.cssText = `
+      padding: 6px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 5px;
+      cursor: pointer;
+      background: #f8fafc;
+    `;
+  });
+
+  container.appendChild(applyButton);
+  container.appendChild(resetButton);
+
+  return container;
 }
 
 // Отрисовка журнала расстановки
 function renderPlacementLog() {
-  const tbody = document.querySelector('#placementLogTable tbody');
-  if (!tbody) return;
+  const table = document.querySelector(
+    '#placementLogTable'
+  );
 
-  if (placementLog.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:40px;">Журнал пуст. Поставьте оператора на пост в Матрице ILU.</td></tr>';
+  const tbody = table?.querySelector('tbody');
+
+  if (!table || !tbody) {
     return;
   }
 
-  tbody.innerHTML = placementLog.map(entry => `
+  const headers = table.querySelectorAll(
+    'thead th'
+  );
+
+  const filterTypes = [
+    'date',
+    'operator',
+    'post'
+  ];
+
+  const activeFilters = [
+    placementFilters.dateFrom ||
+      placementFilters.dateTo,
+
+    placementFilters.operators.length > 0,
+
+    placementFilters.posts.length > 0
+  ];
+
+  headers.forEach((header, index) => {
+    const type = filterTypes[index];
+
+    if (!type) return;
+
+    header.innerHTML = '';
+
+    const title = document.createElement('span');
+
+    title.textContent =
+      type === 'date'
+        ? 'Дата'
+        : type === 'operator'
+          ? 'Оператор'
+          : 'Пост';
+
+    const button = document.createElement('button');
+
+    button.type = 'button';
+    button.textContent =
+      activeFilters[index] ? ' ▼' : ' ⏷';
+
+    button.title = 'Открыть фильтр';
+
+    button.style.cssText = `
+      margin-left: 6px;
+      padding: 1px 5px;
+      border: 1px solid #94a3b8;
+      border-radius: 4px;
+      background: ${
+        activeFilters[index]
+          ? '#dbeafe'
+          : '#f8fafc'
+      };
+      color: #1e40af;
+      cursor: pointer;
+    `;
+
+    button.onclick = event => {
+      openPlacementFilterMenu(event, type);
+    };
+
+    header.appendChild(title);
+    header.appendChild(button);
+  });
+
+  const filteredLog =
+    getFilteredPlacementLog();
+
+  if (filteredLog.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td
+          colspan="3"
+          style="
+            text-align:center;
+            color:#94a3b8;
+            padding:40px;
+          "
+        >
+          Нет записей по выбранным фильтрам.
+        </td>
+      </tr>
+    `;
+
+    return;
+  }
+
+  tbody.innerHTML = filteredLog.map(entry => `
     <tr>
       <td>${entry.date}</td>
       <td>${entry.opName}</td>
@@ -456,10 +998,701 @@ function getOperatorPolyvalence(idx) {
 
 // ======================== ЛОГИКА ВЗАИМОДЕЙСТВИЯ ========================
 
+//Функции по комбинации расстановок
+function isActivePlacement(status) {
+  return status === '○' || status === '△';
+}
+
+function effectivePlacementLevel(level, status) {
+  // Обычный I при постановке на пост становится Lкр.
+  return status === '○' && level === 'I'
+    ? 'Lкр'
+    : level;
+}
+
+function isQualifiedPlacementLevel(level) {
+  // Lкр считается уровнем L.
+  return (
+    level === 'L' ||
+    level === 'Lкр' ||
+    level === 'U'
+  );
+}
+
+function canSharePost(firstLevel, secondLevel) {
+  return (
+    firstLevel === 'Iкр' &&
+    isQualifiedPlacementLevel(secondLevel)
+  ) || (
+    secondLevel === 'Iкр' &&
+    isQualifiedPlacementLevel(firstLevel)
+  );
+}
+
+function applyPostPlacementRule(row, col, newStatus) {
+  const newLevel = effectivePlacementLevel(
+    data[row][col],
+    newStatus
+  );
+
+  const newIsQualified =
+    isQualifiedPlacementLevel(newLevel);
+
+  for (
+    let otherCol = 0;
+    otherCol < operators.length;
+    otherCol++
+  ) {
+    if (otherCol === col) continue;
+
+    const oldStatus =
+      attendanceData[row][otherCol];
+
+    if (!isActivePlacement(oldStatus)) {
+      continue;
+    }
+
+    const oldLevel = effectivePlacementLevel(
+      data[row][otherCol],
+      oldStatus
+    );
+
+    // Разрешённые пары:
+    // Iкр + U
+    // Iкр + L
+    // Iкр + Lкр
+    if (canSharePost(newLevel, oldLevel)) {
+      continue;
+    }
+
+    // Если ставим новый U/L/Lкр,
+    // старый U/L/Lкр автоматически снимается.
+    if (
+      newIsQualified &&
+      isQualifiedPlacementLevel(oldLevel)
+    ) {
+      attendanceData[row][otherCol] = '';
+
+      const today =
+        new Date().toLocaleDateString('ru-RU');
+
+      placementLog = placementLog.filter(entry =>
+        !(
+          entry.date === today &&
+          entry.opName === operators[otherCol] &&
+          entry.postName === posts[row]
+        )
+      );
+
+      continue;
+    }
+
+    alert(
+      `На посте «${posts[row]}» нельзя одновременно ` +
+      `поставить операторов с уровнями ` +
+      `${newLevel} и ${oldLevel}.\n` +
+      `Разрешена только комбинация Iкр + U ` +
+      `или Iкр + L.`
+    );
+
+    return false;
+  }
+
+  return true;
+}
+
+function formatDateForInput(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+function formatInputDateToRu(value) {
+  if (!value) return '—';
+
+  const parts = value.split('-');
+
+  if (parts.length !== 3) {
+    return '—';
+  }
+
+  return `${parts[2]}.${parts[1]}.${parts[0]}`;
+}
+
+function calculateTrainingDuration(startValue, endValue) {
+  const start = new Date(`${startValue}T00:00:00`);
+  const end = new Date(`${endValue}T00:00:00`);
+
+  const difference = Math.round(
+    (end - start) / (1000 * 60 * 60 * 24)
+  );
+
+  return Math.max(1, difference + 1);
+}
+
+function createTrainingOption(value, text) {
+  const option = document.createElement('option');
+  option.value = String(value);
+  option.textContent = text;
+  return option;
+}
+
+function openTrainingRecordForm(options = {}) {
+  const automatic = options.automatic === true;
+
+  const initialRow = Number.isInteger(options.row)
+    ? options.row
+    : 0;
+
+  const initialCol = Number.isInteger(options.col)
+    ? options.col
+    : 0;
+
+  const today = new Date();
+
+  const overlay = document.createElement('div');
+
+  overlay.style.cssText = `
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(15, 23, 42, 0.48);
+  `;
+
+  const modal = document.createElement('div');
+
+  modal.style.cssText = `
+    width: min(520px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: 24px;
+    border-radius: 12px;
+    background: #ffffff;
+    box-shadow: 0 20px 60px rgba(0,0,0,.28);
+    font-family: Arial, sans-serif;
+  `;
+
+  const title = document.createElement('h3');
+
+  title.textContent = automatic
+    ? 'Добавление обучения из матрицы'
+    : 'Добавление записи обучения';
+
+  title.style.cssText = `
+    margin: 0 0 20px;
+    color: #0f172a;
+  `;
+
+  function createLabel(text) {
+    const label = document.createElement('label');
+
+    label.textContent = text;
+
+    label.style.cssText = `
+      display: block;
+      margin-bottom: 6px;
+      color: #334155;
+      font-size: 13px;
+      font-weight: 600;
+    `;
+
+    return label;
+  }
+
+  function applyFieldStyle(element) {
+    element.style.cssText = `
+      width: 100%;
+      box-sizing: border-box;
+      padding: 9px 10px;
+      margin-bottom: 14px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      color: #0f172a;
+      background: #ffffff;
+      font-size: 14px;
+    `;
+  }
+
+  const operatorLabel = createLabel('Оператор');
+  const operatorSelect = document.createElement('select');
+
+  operators.forEach((operator, index) => {
+    operatorSelect.appendChild(
+      createTrainingOption(index, operator)
+    );
+  });
+
+  operatorSelect.value = String(initialCol);
+  operatorSelect.disabled = automatic;
+  applyFieldStyle(operatorSelect);
+
+  const postLabel = createLabel('Пост');
+  const postSelect = document.createElement('select');
+
+  posts.forEach((post, index) => {
+    postSelect.appendChild(
+      createTrainingOption(index, post)
+    );
+  });
+
+  postSelect.value = String(initialRow);
+  postSelect.disabled = automatic;
+  applyFieldStyle(postSelect);
+
+  const levelLabel = createLabel('Уровень обучения');
+  const levelSelect = document.createElement('select');
+
+  [
+    ['Iкр', 'Iкр — обучается на I'],
+    ['I', 'I — новичок'],
+    ['Lкр', 'Lкр — обучается на L'],
+    ['L', 'L — опытный'],
+    ['U', 'U — мастер-форматор']
+  ].forEach(([value, text]) => {
+    levelSelect.appendChild(
+      createTrainingOption(value, text)
+    );
+  });
+
+  levelSelect.value = automatic
+    ? 'Iкр'
+    : (
+        data[initialRow]?.[initialCol] ||
+        'Iкр'
+      );
+
+  levelSelect.disabled = automatic;
+  applyFieldStyle(levelSelect);
+
+  const statusLabel = createLabel('Статус обучения');
+  const statusSelect = document.createElement('select');
+
+  [
+    ['План', 'План'],
+    ['В процессе', 'В процессе'],
+    ['Завершено', 'Завершено']
+  ].forEach(([value, text]) => {
+    statusSelect.appendChild(
+      createTrainingOption(value, text)
+    );
+  });
+
+  statusSelect.value = automatic
+    ? 'В процессе'
+    : 'План';
+
+  applyFieldStyle(statusSelect);
+
+  const formatorLabel = createLabel(
+    'Форматор с уровнем U на выбранном посту'
+  );
+
+  const formatorSelect = document.createElement('select');
+  applyFieldStyle(formatorSelect);
+
+  const formatorHint = document.createElement('div');
+
+  formatorHint.style.cssText = `
+    margin: -7px 0 15px;
+    color: #64748b;
+    font-size: 12px;
+  `;
+
+  const startLabel = createLabel(
+    'Дата начала обучения'
+  );
+
+  const startInput = document.createElement('input');
+  startInput.type = 'date';
+  startInput.value = formatDateForInput(today);
+  applyFieldStyle(startInput);
+
+  const endLabel = createLabel(
+    'Дата окончания обучения'
+  );
+
+  const endInput = document.createElement('input');
+  endInput.type = 'date';
+  applyFieldStyle(endInput);
+
+  const commentLabel = createLabel('Комментарий');
+
+  const commentInput = document.createElement('textarea');
+
+  commentInput.rows = 3;
+  commentInput.placeholder =
+    'Комментарий к обучению';
+
+  applyFieldStyle(commentInput);
+  commentInput.style.resize = 'vertical';
+
+  function getSelectedPostIndex() {
+    return parseInt(postSelect.value, 10);
+  }
+
+  function getSelectedOperatorIndex() {
+    return parseInt(operatorSelect.value, 10);
+  }
+
+  function updateDefaultEndDate() {
+    const postIndex = getSelectedPostIndex();
+
+    const duration =
+      parseInt(trainingDays[postIndex], 10) || 1;
+
+    const startDate = startInput.value
+      ? new Date(`${startInput.value}T00:00:00`)
+      : new Date();
+
+    const calculatedEndDate = new Date(startDate);
+
+    calculatedEndDate.setDate(
+      calculatedEndDate.getDate() + duration - 1
+    );
+
+    endInput.value =
+      formatDateForInput(calculatedEndDate);
+  }
+
+  function updateFormatorList() {
+    const postIndex = getSelectedPostIndex();
+    const operatorIndex =
+      getSelectedOperatorIndex();
+
+    formatorSelect.innerHTML = '';
+
+    const emptyOption = createTrainingOption(
+      '',
+      'Выберите форматора'
+    );
+
+    formatorSelect.appendChild(emptyOption);
+
+    const formatorIndexes = [];
+
+    for (
+      let index = 0;
+      index < operators.length;
+      index++
+    ) {
+      if (index === operatorIndex) {
+        continue;
+      }
+
+      if (data[postIndex]?.[index] === 'U') {
+        formatorIndexes.push(index);
+
+        formatorSelect.appendChild(
+          createTrainingOption(
+            index,
+            operators[index]
+          )
+        );
+      }
+    }
+
+    if (formatorIndexes.length === 0) {
+      emptyOption.textContent =
+        'Нет операторов с уровнем U';
+
+      formatorSelect.disabled = true;
+
+      formatorHint.textContent =
+        'На выбранном посту нет операторов с уровнем U.';
+    } else {
+      formatorSelect.disabled = false;
+
+      formatorHint.textContent =
+        'Показаны только операторы с уровнем U на выбранном посту.';
+    }
+  }
+
+  function updateLevelFromMatrix() {
+    if (automatic) return;
+
+    const postIndex = getSelectedPostIndex();
+    const operatorIndex =
+      getSelectedOperatorIndex();
+
+    const matrixLevel =
+      data[postIndex]?.[operatorIndex];
+
+    levelSelect.value = [
+      'Iкр',
+      'I',
+      'Lкр',
+      'L',
+      'U'
+    ].includes(matrixLevel)
+      ? matrixLevel
+      : 'Iкр';
+  }
+
+  postSelect.addEventListener('change', () => {
+    updateLevelFromMatrix();
+    updateFormatorList();
+    updateDefaultEndDate();
+  });
+
+  operatorSelect.addEventListener(
+    'change',
+    () => {
+      updateLevelFromMatrix();
+      updateFormatorList();
+    }
+  );
+
+  startInput.addEventListener(
+    'change',
+    updateDefaultEndDate
+  );
+
+  updateFormatorList();
+  updateDefaultEndDate();
+
+  const buttons = document.createElement('div');
+
+  buttons.style.cssText = `
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 6px;
+  `;
+
+  const cancelButton =
+    document.createElement('button');
+
+  cancelButton.type = 'button';
+  cancelButton.textContent = 'Отмена';
+
+  cancelButton.style.cssText = `
+    padding: 9px 16px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #ffffff;
+    cursor: pointer;
+  `;
+
+  const saveButton =
+    document.createElement('button');
+
+  saveButton.type = 'button';
+  saveButton.textContent = 'Сохранить обучение';
+
+  saveButton.style.cssText = `
+    padding: 9px 16px;
+    border: 0;
+    border-radius: 6px;
+    color: #ffffff;
+    background: #2563eb;
+    cursor: pointer;
+  `;
+
+  cancelButton.onclick = () => {
+    overlay.remove();
+
+    /*
+     * Если форма была открыта через треугольник,
+     * отменяем постановку треугольника.
+     */
+    if (automatic) {
+      attendanceData[initialRow][initialCol] = '';
+      renderMatrix();
+    }
+  };
+
+  saveButton.onclick = () => {
+    const postIndex = getSelectedPostIndex();
+    const operatorIndex =
+      getSelectedOperatorIndex();
+
+    if (
+      !Number.isInteger(postIndex) ||
+      !posts[postIndex]
+    ) {
+      alert('Выберите пост.');
+      return;
+    }
+
+    if (
+      !Number.isInteger(operatorIndex) ||
+      !operators[operatorIndex]
+    ) {
+      alert('Выберите оператора.');
+      return;
+    }
+
+    if (!startInput.value || !endInput.value) {
+      alert(
+        'Выберите даты начала и окончания обучения.'
+      );
+      return;
+    }
+
+    if (endInput.value < startInput.value) {
+      alert(
+        'Дата окончания не может быть раньше даты начала.'
+      );
+      return;
+    }
+
+    if (
+      !formatorSelect.disabled &&
+      !formatorSelect.value
+    ) {
+      alert('Выберите форматора.');
+      return;
+    }
+
+    const selectedOperator =
+      operators[operatorIndex];
+
+    const selectedPost =
+      posts[postIndex];
+
+    const formator = formatorSelect.value
+      ? operators[
+          parseInt(formatorSelect.value, 10)
+        ]
+      : '—';
+
+    const startDateObject = new Date(
+      `${startInput.value}T00:00:00`
+    );
+
+    const endDateObject = new Date(
+      `${endInput.value}T00:00:00`
+    );
+
+    // Переносим выбранный перспективный уровень
+    // в матрицу ILU.
+    data[postIndex][operatorIndex] =
+      levelSelect.value;
+
+    // Для автоматического обучения через △
+    if (automatic) {
+      attendanceData[postIndex][operatorIndex] = '△';
+    }
+
+    const record = {
+      year: startDateObject.getFullYear(),
+
+      month: startDateObject.toLocaleString(
+        'ru-RU',
+        { month: 'long' }
+      ),
+
+      startWeek:
+        getWeekNumber(startDateObject),
+
+      endWeek:
+        getWeekNumber(endDateObject),
+
+      post: selectedPost,
+      op: selectedOperator,
+      level: levelSelect.value,
+      status: statusSelect.value,
+      formator,
+
+      startDate:
+        formatInputDateToRu(startInput.value),
+
+      validDate:
+        formatInputDateToRu(endInput.value),
+
+      duration: calculateTrainingDuration(
+        startInput.value,
+        endInput.value
+      ),
+
+      comment:
+        commentInput.value.trim() || '—',
+
+      autoFromMatrix: automatic
+    };
+
+    /*
+     * Автоматическую запись обновляем,
+     * чтобы повторный выбор треугольника
+     * не создавал дубликаты.
+     */
+    if (automatic) {
+      const existingIndex =
+        trainingRecords.findIndex(item =>
+          item.autoFromMatrix === true &&
+          item.post === selectedPost &&
+          item.op === selectedOperator
+        );
+
+      if (existingIndex >= 0) {
+        trainingRecords[existingIndex] = record;
+      } else {
+        trainingRecords.push(record);
+      }
+    } else {
+      trainingRecords.push(record);
+    }
+
+    overlay.remove();
+
+    renderTrainingTable();
+    renderMatrix();
+  };
+
+  buttons.appendChild(cancelButton);
+  buttons.appendChild(saveButton);
+
+  modal.appendChild(title);
+  modal.appendChild(operatorLabel);
+  modal.appendChild(operatorSelect);
+  modal.appendChild(postLabel);
+  modal.appendChild(postSelect);
+  modal.appendChild(levelLabel);
+  modal.appendChild(levelSelect);
+  modal.appendChild(statusLabel);
+  modal.appendChild(statusSelect);
+  modal.appendChild(formatorLabel);
+  modal.appendChild(formatorSelect);
+  modal.appendChild(formatorHint);
+  modal.appendChild(startLabel);
+  modal.appendChild(startInput);
+  modal.appendChild(endLabel);
+  modal.appendChild(endInput);
+  modal.appendChild(commentLabel);
+  modal.appendChild(commentInput);
+  modal.appendChild(buttons);
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+}
+
+/*
+ * Эта функция вызывается при выборе △.
+ */
+function openAutomaticTrainingForm(row, col) {
+  openTrainingRecordForm({
+    automatic: true,
+    row,
+    col
+  });
+}
+
 // Изменение статуса оператора на конкретном посту (○ стоит, △ обучается, пусто)
 function cyclePostStatus(row, col) {
-  const td = document.querySelector(`#iluTable tbody tr:nth-child(${row + 1}) td:nth-child(${5 + col * 2})`);
+  const td = document.querySelector(
+    `#iluTable tbody tr:nth-child(${row + 1}) ` +
+    `td:nth-child(${5 + col * 2})`
+  );
+
   if (!td) return;
+
   const cur = attendanceData[row][col];
   const currentLevel = data[row][col];
 
@@ -469,61 +1702,124 @@ function cyclePostStatus(row, col) {
     { value: '△', label: '△ Обучается' }
   ];
 
-  const options = allOptions.filter(opt => {
-    if (opt.value === '') return true;
-    if (opt.value === '○') return currentLevel !== null && currentLevel !== '';
-    if (opt.value === '△') return currentLevel === 'Iкр';
+  const options = allOptions.filter(option => {
+    if (option.value === '') {
+      return true;
+    }
+
+    if (option.value === '○') {
+      return currentLevel !== null &&
+        currentLevel !== '';
+    }
+
+    if (option.value === '△') {
+      return currentLevel === 'Iкр';
+    }
+
     return true;
   });
 
-  showInlineSelect(td, cur, options, (newVal) => {
-    if (newVal === '○') {
-      // Проверяем, не стоит ли уже оператор на другом посту сегодня
-      const today = new Date().toLocaleDateString('ru-RU');
-            let alreadyOnPost = null;
-      for (let r2 = 0; r2 < posts.length; r2++) {
-        if (r2 === row) continue;
-        if (attendanceData[r2][col] === '○') {
-          alreadyOnPost = posts[r2];
-          break;
+  showInlineSelect(
+    td,
+    cur,
+    options,
+    newVal => {
+      // Снятие оператора с поста.
+      if (newVal === '') {
+        attendanceData[row][col] = '';
+        renderMatrix();
+        return;
+      }
+
+      if (isActivePlacement(newVal)) {
+        const today =
+          new Date().toLocaleDateString('ru-RU');
+
+        const oldPosts = [];
+
+        // Проверяем, не стоит ли оператор
+        // уже на другом посту.
+        for (
+          let otherRow = 0;
+          otherRow < posts.length;
+          otherRow++
+        ) {
+          if (otherRow === row) continue;
+
+          if (
+            isActivePlacement(
+              attendanceData[otherRow][col]
+            )
+          ) {
+            oldPosts.push(posts[otherRow]);
+          }
+        }
+
+        // Сначала проверяем совместимость уровней
+        // на новом посту.
+        if (!applyPostPlacementRule(row, col, newVal)) {
+          return;
+        }
+
+        // После успешной проверки убираем оператора
+        // со старого поста.
+        if (oldPosts.length > 0) {
+          for (
+            let otherRow = 0;
+            otherRow < posts.length;
+            otherRow++
+          ) {
+            if (otherRow === row) continue;
+
+            if (
+              isActivePlacement(
+                attendanceData[otherRow][col]
+              )
+            ) {
+              const oldPost = posts[otherRow];
+
+              attendanceData[otherRow][col] = '';
+
+              placementLog = placementLog.filter(entry =>
+                !(
+                  entry.date === today &&
+                  entry.opName === operators[col] &&
+                  entry.postName === oldPost
+                )
+              );
+            }
+          }
+        }
+
+        if (operatorRoles[col] !== 'НУ') {
+          operatorAttendance[col] = 'Я';
         }
       }
 
-      if (alreadyOnPost) {
-        const choice = confirm(
-          `Оператор ${operators[col]} уже стоит на посту «${alreadyOnPost}» сегодня.\n` +
-          `Нажмите «ОК» — оставить в журнале новый пост «${posts[row]}»\n` +
-          `Нажмите «Отмена» — оставить старый пост «${alreadyOnPost}»`
-        );
-        if (choice) {
-          // Оставляем новый пост: удаляем старую запись
-          placementLog = placementLog.filter(entry =>
-            !(entry.date === today && entry.opName === operators[col] && entry.postName === alreadyOnPost)
+      attendanceData[row][col] = newVal;
+
+      // I при постановке становится Lкр.
+      if (
+        newVal === '○' &&
+        data[row][col] === 'I'
+      ) {
+        data[row][col] = 'Lкр';
+      }
+
+      if (newVal === '○') {
+        logPlacement(
+          operators[col],
+          posts[row]
           );
-          logPlacement(operators[col], posts[row]);
-        } else {
-          // Оставляем старый пост: не записываем новый
-          // и убираем оператора с текущего поста
-          attendanceData[row][col] = '';
-        }
-      } else {
-        logPlacement(operators[col], posts[row]);
-      }
-    }
+}
 
-    if (newVal === '○' || newVal === '△') {
-      for (let r = 0; r < posts.length; r++) {
-        if (r !== row) attendanceData[r][col] = '';
-      }
-      if (operatorRoles[col] !== 'НУ') operatorAttendance[col] = 'Я';
-    }
+      renderMatrix();
 
-    attendanceData[row][col] = newVal;
-    if (newVal === '○' && data[row][col] === 'I') {
-      data[row][col] = 'Lкр';
+      if (newVal === '△') {
+         openAutomaticTrainingForm(row, col);
+}
     }
-    renderMatrix();
-  });
+  );
 }
 
 // Изменение уровня ILU оператора на посту
@@ -712,12 +2008,37 @@ function editPost(oldName) {
 
 // Редактирование ФИО начальника цеха или участка
 function editChief(type) {
-  const id = type === 'workshop' ? 'infoWorkshopChief' : 'infoSectionChief';
-  const label = type === 'workshop' ? 'Начальник цеха' : 'Начальник участка';
-  const current = document.getElementById(id).textContent;
-  const newValue = prompt(`Введите ФИО ${label}:`, current === '—' ? '' : current);
+  const id =
+    type === 'workshop'
+      ? 'infoWorkshopChief'
+      : 'infoSectionChief';
+
+  const label =
+    type === 'workshop'
+      ? 'Начальник цеха'
+      : 'Начальник участка';
+
+  const current =
+    document.getElementById(id).textContent;
+
+  const newValue = prompt(
+    `Введите ФИО ${label}:`,
+    current === '—' ? '' : current
+  );
+
   if (newValue !== null) {
-    document.getElementById(id).textContent = newValue.trim() || '—';
+    const value = newValue.trim();
+
+    if (type === 'workshop') {
+      workshopChief = value;
+    } else {
+      sectionChief = value;
+    }
+
+    document.getElementById(id).textContent =
+      value || '—';
+
+    saveState();
   }
 }
 
@@ -914,10 +2235,42 @@ function updateDateBar() {
 
 // ======================== СИНХРОНИЗАЦИЯ ФИЛЬТРОВ ========================
 function updateInfoCard() {
-  document.getElementById('infoDepartment').textContent = document.getElementById('filterDepartment').value;
-  document.getElementById('infoWorkshop').textContent = document.getElementById('filterWorkshop').value;
-  document.getElementById('infoSection').textContent = document.getElementById('filterSection').value;
-  document.getElementById('infoShift').textContent = document.getElementById('filterShift').value;
+  const department =
+    document.getElementById('filterDepartment').value;
+
+  const workshop =
+    document.getElementById('filterWorkshop').value;
+
+  const section =
+    document.getElementById('filterSection').value;
+
+  const shift =
+    document.getElementById('filterShift').value;
+
+  filterState.department = department;
+  filterState.workshop = workshop;
+  filterState.section = section;
+  filterState.shift = shift;
+
+  document.getElementById('infoDepartment')
+    .textContent = department;
+
+  document.getElementById('infoWorkshop')
+    .textContent = workshop;
+
+  document.getElementById('infoSection')
+    .textContent = section;
+
+  document.getElementById('infoShift')
+    .textContent = shift;
+
+  document.getElementById('infoWorkshopChief')
+    .textContent = workshopChief || '—';
+
+  document.getElementById('infoSectionChief')
+    .textContent = sectionChief || '—';
+
+  saveState();
 }
 document.getElementById('filterDepartment').addEventListener('change', updateInfoCard);
 document.getElementById('filterWorkshop').addEventListener('change', updateInfoCard);
@@ -1659,63 +3012,9 @@ function placeRotationOp(opName, postIndex, dayIndex) {
 
 // ======================== ЖУРНАЛ ОБУЧЕНИЙ ========================
 function addTrainingRecord() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.toLocaleString('ru-RU', { month: 'long' });
-
-  // Выбор оператора
-  const opName = prompt('Введите фамилию оператора:');
-  if (!opName || !operators.includes(opName.trim())) {
-    alert('Оператор не найден');
-    return;
-  }
-  const op = opName.trim();
-
-  // Выбор поста
-  let postList = 'Список постов:\n';
-  posts.forEach((p, i) => { postList += (i + 1) + '. ' + p + '\n'; });
-  const postNum = prompt(postList + '\nВведите номер поста:');
-  if (!postNum || isNaN(postNum) || postNum < 1 || postNum > posts.length) {
-    alert('Некорректный номер поста');
-    return;
-  }
-  const post = posts[parseInt(postNum) - 1];
-  const postIndex = parseInt(postNum) - 1;
-
-  // Уровень
-  const level = prompt('Введите уровень (Iкр, I, Lкр, L, U):');
-  if (!['Iкр','I','Lкр','L','U'].includes(level)) {
-    alert('Некорректный уровень');
-    return;
-  }
-
-  // Статус
-  const status = prompt('Введите статус (План, В процессе, Завершено):');
-  if (!status) return;
-
-  // Форматор
-  const formator = prompt('Введите фамилию форматора:') || '—';
-
-  // Даты
-  const startDate = prompt('Дата начала обучения (ДД.ММ.ГГГГ):', now.toLocaleDateString('ru-RU'));
-  const validDate = prompt('Дата валидации (ДД.ММ.ГГГГ, можно оставить пустым):') || '—';
-
-  // Срок
-  const duration = prompt('Срок обучения (дней):', trainingDays[postIndex]) || trainingDays[postIndex];
-
-  // Комментарий
-  const comment = prompt('Комментарий (больничный, отпуск и т.д.):') || '—';
-
-  // Неделя начала и окончания
-  const startWeek = getWeekNumber(new Date(startDate.split('.').reverse().join('-')));
-  const endWeek = duration ? startWeek + Math.ceil(parseInt(duration) / 7) - 1 : startWeek;
-
-  trainingRecords.push({
-    year, month, startWeek, endWeek, post, op, level, status,
-    formator, startDate, validDate, duration, comment
+  openTrainingRecordForm({
+    automatic: false
   });
-
-  renderTrainingTable();
 }
 
 function getWeekNumber(date) {
@@ -1733,6 +3032,8 @@ function deleteTrainingRecord(index) {
 function renderTrainingTable() {
   const tbody = document.querySelector('#trainingTable tbody');
   if (!tbody) return;
+
+  saveState();
 
   if (trainingRecords.length === 0) {
     tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:#94a3b8;padding:40px;">Нет записей. Нажмите «+ Добавить запись»</td></tr>';
@@ -1786,3 +3087,5 @@ function editTrainingField(index, field) {
 updateDateBar();
 updateInfoCard();
 renderMatrix();
+renderTrainingTable();
+renderPlacementLog();
