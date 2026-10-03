@@ -1,0 +1,169 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; }
+
+/* Логотип */
+.logo {
+  height: 40px;
+  width: auto;
+  position: absolute;
+  left: 30px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Эмблема */
+.emblem {
+  height: 70px;
+  width: auto;
+  position: absolute;
+  right: 30px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.container { max-width: 98%; margin: 0 auto; padding: 10px; }
+
+/* Шапка с фильтрами */
+.header-card {
+  background: white; border-radius: 16px; padding: 20px 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 20px;
+  display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end;
+  justify-content: center;
+  position: relative;
+}
+.filter-group { display: flex; flex-direction: column; gap: 4px; }
+.filter-group label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; }
+.filter-group select, .filter-group input {
+  padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px;
+  font-size: 14px; background: #f8fafc; min-width: 180px; color: #0f172a;
+}
+.filter-group input { min-width: 160px; }
+.filter-group select:focus, .filter-group input:focus { outline: 2px solid #3b82f6; border-color: #3b82f6; }
+
+/* Вкладки */
+.tabs { display: flex; gap: 2px; margin-bottom: 20px; background: #e2e8f0; padding: 4px; border-radius: 12px; justify-content: center; }
+.tab { padding: 10px 20px; border: none; background: transparent; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; color: #475569; transition: all 0.2s; }
+.tab.active { background: white; color: #0f172a; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.tab:hover:not(.active) { color: #0f172a; background: rgba(255,255,255,0.5); }
+
+/* Средняя строка */
+.middle-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: stretch; justify-content: center; font-size: 14px; }
+
+/* Календарь */
+.date-bar {
+  background: white; border-radius: 12px; padding: 16px 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  display: flex; flex-direction: column; justify-content: center; gap: 4px;
+  font-size: 14px; color: #475569; font-weight: 500;
+  min-width: 240px; white-space: nowrap;
+}
+.date-bar span { color: #0f172a; font-weight: 700; }
+
+/* Карточка с данными */
+.info-card {
+  background: white; border-radius: 12px; padding: 16px 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  display: flex; flex-direction: column; justify-content: center; gap: 6px; font-size: 13px;
+  min-width: 200px;
+}
+.info-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.info-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #64748b; min-width: 95px; }
+.info-value { font-size: 14px; font-weight: 600; color: #0f172a; }
+.info-value.clickable { cursor: pointer; border-bottom: 1px dashed #94a3b8; }
+.info-value.clickable:hover { color: #3b82f6; border-bottom-color: #3b82f6; }
+
+/* Карточка статистики */
+.stats-card {
+  background: white; border-radius: 12px; padding: 16px 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  display: flex; flex-direction: column; justify-content: center; gap: 6px; font-size: 13px;
+  min-width: 240px;
+}
+
+/* Кнопки над матрицей */
+.add-buttons-top {
+  display: flex; gap: 8px; justify-content: flex-start; margin-bottom: 8px;
+}
+.btn-small {
+  padding: 4px 12px; border-radius: 6px; border: 1px solid #cbd5e1;
+  background: white; cursor: pointer; font-size: 12px; font-weight: 600;
+  transition: all 0.2s;
+}
+.btn-small:hover { background: #f1f5f9; border-color: #94a3b8; }
+
+/* Матрица */
+.matrix-container { background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow-x: auto; padding: 10px; }
+table { border-collapse: collapse; width: 100%; min-width: 800px; }
+th, td { padding: 8px 6px; text-align: center; border: 1px solid #000000; font-size: 12px; min-width: 45px; }
+th { background: #f8fafc; font-weight: 600; color: #475569; position: sticky; top: 0; }
+th:first-child { min-width: 140px; text-align: left; }
+td:first-child { text-align: left; font-weight: 500; }
+
+/* Ячейки */
+.cell { cursor: pointer; transition: all 0.15s; border-radius: 4px; font-weight: 700; }
+.cell:hover {
+  box-shadow: inset 0 0 0 2px #3b82f6, inset 0 0 12px rgba(59, 130, 246, 0.15);
+  background-color: #eff6ff;
+}
+.level-I { background: #fef9c3; color: #854d0e; }
+.level-L { background: #fed7aa; color: #9a3412; }
+.level-U { background: #fecaca; color: #991b1b; }
+.status-ya { color: #16a34a; }
+.status-ney { color: #ef4444; }
+.status-ob { color: #3b82f6; }
+
+/* Легенда */
+.legend { display: flex; gap: 20px; margin-top: 14px; font-size: 12px; color: #64748b; padding: 0 10px; flex-wrap: wrap; }
+.legend span { display: flex; align-items: center; gap: 4px; }
+.legend .dot { width: 14px; height: 14px; border-radius: 4px; }
+
+/* Вкладки */
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+.placeholder { background: white; border-radius: 12px; padding: 40px; text-align: center; color: #94a3b8; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+
+/* Контекстное меню */
+.context-menu {
+  position: absolute; background: white; border: 1px solid #e2e8f0;
+  border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  padding: 4px; z-index: 1000; min-width: 160px;
+}
+.context-menu div {
+  padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; color: #1e293b;
+}
+.context-menu div:hover { background: #f1f5f9; }
+.context-menu div.danger { color: #ef4444; }
+.context-menu div.danger:hover { background: #fef2f2; }
+th span { display: inline-block; }
+
+/* Подсветка ячеек плана развития при наведении */
+#devCalendarTable td {
+  transition: all 0.15s ease;
+}
+#devCalendarTable td:hover {
+  box-shadow: inset 0 0 0 2px #3b82f6, inset 0 0 12px rgba(59, 130, 246, 0.15);
+  background-color: #eff6ff;
+}
+#devCalendarTable td:first-child:hover {
+  box-shadow: inset 0 0 0 2px #3b82f6, inset 0 0 12px rgba(59, 130, 246, 0.15);
+}
+
+/* Подсветка ячеек ротации при наведении */
+#rotCalendarTable td {
+  transition: all 0.15s ease;
+}
+#rotCalendarTable td:hover {
+  box-shadow: inset 0 0 0 2px #3b82f6, inset 0 0 12px rgba(59, 130, 246, 0.15);
+  background-color: #eff6ff;
+}
+#rotCalendarTable td:first-child:hover {
+  box-shadow: inset 0 0 0 2px #3b82f6, inset 0 0 12px rgba(59, 130, 246, 0.15);
+}
+@keyframes blink-red {
+  0%, 100% { background-color: #fecaca; }
+  50% { background-color: #ffffff; }
+}
+@keyframes blink-yellow {
+  0%, 100% { background-color: #fef08a; }
+  50% { background-color: #ffffff; }
+}
