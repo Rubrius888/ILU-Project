@@ -21,6 +21,52 @@ function exportCurrentTableToExcel() {
     Array.from(row.cells).forEach((cell, cellIndex) => {
       const value = cell.textContent.trim();
 
+      const presentMarker =
+  cell.querySelector('.status-marker-present');
+
+const trainingMarker =
+  cell.querySelector('.status-marker-training');
+
+if (presentMarker) {
+  cell.innerHTML =
+    '<font face="Arial" size="6"><b>О</b></font>';
+
+  cell.className += ' operator-mark';
+
+  cell.style.cssText = `
+    height:77px !important;
+    min-height:77px !important;
+    max-height:77px !important;
+    padding:0 !important;
+    text-align:center !important;
+    vertical-align:middle !important;
+    line-height:77px !important;
+    white-space:nowrap !important;
+  `;
+
+  return;
+}
+
+if (trainingMarker) {
+  cell.innerHTML =
+    '<font face="Arial" size="6"><b>△</b></font>';
+
+  cell.className += ' training-mark';
+
+  cell.style.cssText = `
+    height:77px !important;
+    min-height:77px !important;
+    max-height:77px !important;
+    padding:0 !important;
+    text-align:center !important;
+    vertical-align:middle !important;
+    line-height:77px !important;
+    white-space:nowrap !important;
+  `;
+
+  return;
+}
+
       if (!value) {
         return;
       }

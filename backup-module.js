@@ -29,6 +29,15 @@ function validateState(state) {
     }
   });
 
+  // Поле появилось в новой версии приложения, поэтому старые резервные
+  // копии без истории статистики остаются совместимыми.
+  if (
+    state.statsHistory !== undefined &&
+    !Array.isArray(state.statsHistory)
+  ) {
+    throw new Error('Некорректная история статистики');
+  }
+
   const postCount = state.posts.length;
   const operatorCount = state.operators.length;
 

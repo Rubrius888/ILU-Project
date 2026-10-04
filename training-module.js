@@ -283,7 +283,10 @@ function openTrainingRecordForm(options = {}) {
         continue;
       }
 
-      if (data[postIndex]?.[index] === 'U') {
+      if (
+        operatorRoles[index] !== 'ДС' &&
+        data[postIndex]?.[index] === 'U'
+      ) {
         formatorIndexes.push(index);
 
         formatorSelect.appendChild(
@@ -581,6 +584,78 @@ function openAutomaticTrainingForm(row, col) {
   });
 }
 
+/*
+ * Автоматическая запись обучения для правила I -> Lкр.
+ *
+ * В отличие от сценария с △ здесь форма не открывается:
+ * оператор уже поставлен на пост, поэтому запись сразу попадает
+ * в журнал со статусом «В процессе». Дату валидации заполняем
+ * расчётной датой окончания обучения, как и в форме добавления записи.
+ */
+function createAutomaticLcrTrainingRecord(row, col) {
+  const post = posts[row];
+  const operator = operators[col];
+
+  if (!post || !operator) {
+    return;
+  }
+
+  const activeRecordIndex = trainingRecords.findIndex(record =>
+    record.autoFromMatrix === true &&
+    record.post === post &&
+    record.op === operator &&
+    record.status !== 'Завершено'
+  );
+
+  const startDate = new Date();
+  const duration = parseInt(trainingDays[row], 10) || 1;
+  const endDate = new Date(startDate);
+
+  endDate.setDate(endDate.getDate() + duration - 1);
+
+  let formator = '—';
+
+  for (let index = 0; index < operators.length; index++) {
+    if (
+      index !== col &&
+      operatorRoles[index] !== 'ДС' &&
+      data[row]?.[index] === 'U'
+    ) {
+      formator = operators[index];
+      break;
+    }
+  }
+
+  const record = {
+    year: startDate.getFullYear(),
+    month: startDate.toLocaleString('ru-RU', { month: 'long' }),
+    startWeek: getWeekNumber(startDate),
+    endWeek: getWeekNumber(endDate),
+    post,
+    op: operator,
+    level: 'Lкр',
+    status: 'В процессе',
+    formator,
+    startDate: formatInputDateToRu(formatDateForInput(startDate)),
+    validDate: formatInputDateToRu(formatDateForInput(endDate)),
+    duration,
+    comment: 'Автоматически создано: I → Lкр при постановке на пост',
+    autoFromMatrix: true
+  };
+
+  if (activeRecordIndex >= 0) {
+    trainingRecords[activeRecordIndex] = {
+      ...trainingRecords[activeRecordIndex],
+      ...record
+    };
+  } else {
+    trainingRecords.push(record);
+  }
+
+  saveState();
+  renderTrainingTable();
+}
+
 // ======================== ЖУРНАЛ ОБУЧЕНИЙ ========================
 function addTrainingRecord() {
   openTrainingRecordForm({
@@ -598,6 +673,63 @@ function deleteTrainingRecord(index) {
   if (!confirm('Удалить запись об обучении?')) return;
   trainingRecords.splice(index, 1);
   renderTrainingTable();
+}
+
+function applyTrainingValidation(record) {
+  if (
+    !record ||
+    record.status !== 'Завершено' ||
+    !record.validDate ||
+    record.validDate === '—'
+  ) {
+    return false;
+  }
+
+  const row = posts.indexOf(record.post);
+  const column = operators.indexOf(record.op);
+
+  if (row < 0 || column < 0) {
+    return false;
+  }
+
+  const targetBySource = {
+    'Iкр': 'I',
+    'Lкр': 'L'
+  };
+
+  const targetLevel = targetBySource[record.level];
+
+  if (!targetLevel) {
+    return false;
+  }
+
+  record.fromLevel = record.level;
+  record.level = targetLevel;
+  data[row][column] = targetLevel;
+
+  if (attendanceData[row][column] === '△') {
+    attendanceData[row][column] = '○';
+  }
+
+  return true;
+}
+
+function updateTrainingStatus(index, status) {
+  const record = trainingRecords[index];
+
+  if (!record) {
+    return;
+  }
+
+  record.status = status;
+
+  const validated = applyTrainingValidation(record);
+
+  renderTrainingTable();
+
+  if (validated) {
+    renderMatrix();
+  }
 }
 
 function renderTrainingTable() {
@@ -620,7 +752,10 @@ function renderTrainingTable() {
       <td>${r.post}</td>
       <td>${r.op}</td>
       <td>${r.level}</td>
-      <td>${r.status}</td>
+      <td
+        style="cursor:pointer;color:#2563eb;"
+       onclick="editTrainingField(${i}, 'status')"
+      >${r.status}</td>
       <td>${r.formator}</td>
       <td>${r.startDate}</td>
       <td style="cursor:pointer;color:#2563eb;" onclick="editTrainingField(${i}, 'validDate')">${r.validDate}</td>
@@ -633,23 +768,72 @@ function renderTrainingTable() {
 
 function editTrainingField(index, field) {
   const record = trainingRecords[index];
-  let label, current;
 
-  if (field === 'validDate') {
+  let label;
+  let current;
+
+  if (field === 'status') {
+    const options = [
+      { value: 'План', label: 'План' },
+      { value: 'В процессе', label: 'В процессе' },
+      { value: 'Завершено', label: 'Завершено' }
+    ];
+
+    if (typeof showCenteredSelect === 'function') {
+      showCenteredSelect(
+        'Статус обучения',
+        record.status,
+        options,
+        value => updateTrainingStatus(index, value)
+      );
+
+      return;
+    }
+
+    label =
+      'Статус обучения (План / В процессе / Завершено)';
+    current = record.status;
+  } else if (field === 'validDate') {
     label = 'Дата валидации (ДД.ММ.ГГГГ)';
     current = record.validDate;
   } else if (field === 'comment') {
     label = 'Комментарий';
     current = record.comment;
-  } else return;
-
-  const newVal = prompt(label + ':', current === '—' ? '' : current);
-  if (newVal !== null) {
-    if (field === 'validDate') {
-      record.validDate = newVal.trim() || '—';
-    } else if (field === 'comment') {
-      record.comment = newVal.trim() || '—';
-    }
-    renderTrainingTable();
+  } else {
+    return;
   }
+
+  const newValue = prompt(
+    `${label}:`,
+    current === '—' ? '' : current
+  );
+
+  if (newValue === null) {
+    return;
+  }
+
+  if (field === 'status') {
+    updateTrainingStatus(index, newValue.trim());
+    return;
+  }
+
+  if (field === 'validDate') {
+    record.validDate = newValue.trim() || '—';
+
+    if (record.status === 'Завершено') {
+      const validated = applyTrainingValidation(record);
+
+      renderTrainingTable();
+
+      if (validated) {
+        renderMatrix();
+      }
+
+      return;
+    }
+  } else if (field === 'comment') {
+    record.comment = newValue.trim() || '—';
+  }
+
+  renderTrainingTable();
 }

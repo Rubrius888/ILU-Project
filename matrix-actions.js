@@ -107,7 +107,10 @@ function cyclePostStatus(row, col) {
           }
         }
 
-        if (operatorRoles[col] !== 'НУ') {
+        if (
+          operatorRoles[col] !== 'НУ' &&
+          operatorRoles[col] !== 'ДС'
+        ) {
           operatorAttendance[col] = 'Я';
         }
       }
@@ -120,6 +123,12 @@ function cyclePostStatus(row, col) {
         data[row][col] === 'I'
       ) {
         data[row][col] = 'Lкр';
+
+        // При автоматическом переходе I -> Lкр
+        // сразу создаём соответствующую запись в журнале обучения.
+        if (typeof createAutomaticLcrTrainingRecord === 'function') {
+          createAutomaticLcrTrainingRecord(row, col);
+        }
       }
 
       if (newVal === '○') {
@@ -158,15 +167,53 @@ function cycleLevel(row, col) {
     return true;
   });
   showInlineSelect(td, cur, options, (newVal) => {
+    // Очистка уровня означает, что оператор больше не закреплён
+    // за этим постом. Убираем и статус постановки, и незавершённое
+    // обучение по этой связке «пост + оператор».
+    if (newVal === '') {
+      attendanceData[row][col] = '';
+
+      const today = new Date().toLocaleDateString('ru-RU');
+
+      placementLog = placementLog.filter(entry =>
+        !(
+          entry.date === today &&
+          entry.opName === operators[col] &&
+          entry.postName === posts[row]
+        )
+      );
+
+      if (Array.isArray(trainingRecords)) {
+        trainingRecords = trainingRecords.filter(record =>
+          !(
+            record.post === posts[row] &&
+            record.op === operators[col] &&
+            record.status !== 'Завершено'
+          )
+        );
+      }
+    }
+
     data[row][col] = newVal;
+
+    if (
+      newVal === '' &&
+      typeof renderTrainingTable === 'function'
+    ) {
+      renderTrainingTable();
+    }
+
     renderMatrix();
   });
 }
 
 // Изменение статуса явки оператора (модальное окно в центре)
 function cycleOperatorAttendance(idx) {
-  // НУ не участвует в явке
-  if (operatorRoles[idx] === 'НУ') return;
+  // НУ и оператор из другого сектора не участвуют в явке.
+  if (
+    operatorRoles[idx] === 'НУ' ||
+    operatorRoles[idx] === 'ДС'
+  ) return;
   const cur = operatorAttendance[idx];
   const options = [
     { value: 'Я', label: 'Явка' },
@@ -193,10 +240,20 @@ function cycleOperatorRole(idx) {
     { value: 'НУ', label: 'НУ — Начальник участка' },
     { value: 'СО', label: 'СО — Старший оператор' },
     { value: 'О', label: 'О — Оператор' },
-    { value: 'Ф', label: 'Ф — Форматор' }
+    { value: 'Ф', label: 'Ф — Форматор' },
+    { value: 'ДС', label: 'ДС — Оператор из другого сектора' }
   ];
   showCenteredSelect('Должность', cur, options, (newVal) => {
     operatorRoles[idx] = newVal;
+
+    if (newVal === 'ДС') {
+      // Внешний оператор остаётся видимым и может закрывать
+      // известный ему пост, но в явке участка не участвует.
+      operatorAttendance[idx] = 'С';
+    } else if (cur === 'ДС' && operatorAttendance[idx] === 'С') {
+      operatorAttendance[idx] = 'Я';
+    }
+
     renderMatrix();
   });
 }

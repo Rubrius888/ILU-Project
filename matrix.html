@@ -339,8 +339,222 @@
 
   <!-- СТАТИСТИКА -->
   <div id="stats" class="tab-content">
-    <div class="placeholder">
-      📊 Статистика (будет заполнена позже)
+    <div class="stats-dashboard">
+
+      <div class="stats-dashboard-header">
+        <div>
+          <h2>Статистика участка</h2>
+
+          <p id="statsHistoryStatus">
+            История показателей ещё не накоплена.
+          </p>
+        </div>
+
+        <label class="stats-period-control">
+  <span>Период графика</span>
+
+  <select
+    id="statsPeriodSelect"
+    onchange="renderStatsDashboard()"
+  >
+    <option value="30">Последние 30 дней</option>
+    <option value="90">Последние 90 дней</option>
+    <option value="year">Текущий год</option>
+    <option value="all">Вся доступная история</option>
+  </select>
+</label>
+      </div>
+
+      <div class="stats-kpi-grid">
+
+        <div class="stats-kpi-card">
+          <span class="stats-kpi-label">ОПЕРАТОРЫ</span>
+          <strong id="statsTabTotalOps">0</strong>
+          <small id="statsTabAttendance">Явка: 0</small>
+        </div>
+
+        <div class="stats-kpi-card">
+          <span class="stats-kpi-label">ЗАПОЛНЕНИЕ ПОСТОВ</span>
+          <strong id="statsTabFilledPosts">0 / 0</strong>
+          <small id="statsTabEmptyPosts">Незаполнено: 0</small>
+        </div>
+
+        <div class="stats-kpi-card">
+          <span class="stats-kpi-label">ПОКРЫТИЕ U</span>
+          <strong id="statsTabCoverageU">0%</strong>
+          <small>Посты с форматором</small>
+        </div>
+
+        <div class="stats-kpi-card">
+          <span class="stats-kpi-label">ПОЛИВАЛЕНТНОСТЬ 2L</span>
+          <strong id="statsTab2L">0%</strong>
+          <small>Целевой навык участка</small>
+        </div>
+
+        <div class="stats-kpi-card">
+          <span class="stats-kpi-label">ПОЛИВАЛЕНТНОСТЬ 3L</span>
+          <strong id="statsTab3L">0%</strong>
+          <small>Расширенный навык участка</small>
+        </div>
+
+        <div class="stats-kpi-card">
+          <span class="stats-kpi-label">ОБУЧЕНИЕ</span>
+          <strong id="statsTabTraining">0</strong>
+          <small>Постов с обучением</small>
+        </div>
+
+        <div class="stats-kpi-card">
+          <span class="stats-kpi-label">ВАЛИДАЦИИ Iкр → I</span>
+          <strong id="statsTabValidatedI">0</strong>
+          <small>Завершено по журналу обучения</small>
+        </div>
+
+        <div class="stats-kpi-card">
+          <span class="stats-kpi-label">ВАЛИДАЦИИ Lкр → L</span>
+          <strong id="statsTabValidatedL">0</strong>
+          <small>Завершено по журналу обучения</small>
+        </div>
+
+      </div>
+
+      <div class="stats-dashboard-grid">
+
+        <section class="stats-panel">
+          <div class="stats-panel-heading">
+            <h3>Рост поливалентности</h3>
+            <span>ежедневные снимки</span>
+          </div>
+
+          <div
+            id="polyvalenceChart"
+            class="stats-chart"
+            aria-live="polite"
+          ></div>
+        </section>
+
+        <section class="stats-panel">
+          <div class="stats-panel-heading">
+            <h3>Уровни ILU</h3>
+            <span>заполненные ячейки матрицы</span>
+          </div>
+
+          <div
+            id="levelsChart"
+            class="levels-chart"
+            aria-live="polite"
+          ></div>
+        </section>
+
+      </div>
+
+      <section class="stats-panel stats-risk-panel">
+        <div class="stats-panel-heading">
+          <h3>Посты, требующие внимания</h3>
+          <span>незаполненные, без U или с обучением</span>
+        </div>
+
+        <div class="stats-risk-table-wrap">
+          <table
+            id="statsRiskTable"
+            class="stats-risk-table"
+          >
+            <thead>
+              <tr>
+                <th>Пост</th>
+                <th>Состояние</th>
+                <th>U</th>
+                <th>Обучение</th>
+              </tr>
+            </thead>
+
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="stats-rating-grid">
+
+  <section class="stats-panel stats-rating-panel">
+    <div class="stats-panel-heading">
+      <h3>Рейтинг квалификационного покрытия операторов</h3>
+
+      <span>
+        I = 1 · L = 2 · U = 3 · НУ не учитывается
+      </span>
+    </div>
+
+    <div
+      id="statsRatingChart"
+      class="stats-rating-chart"
+      aria-live="polite"
+    ></div>
+  </section>
+
+  <section class="stats-panel stats-rating-panel">
+    <div class="stats-panel-heading">
+      <h3>Рейтинг квалификационного покрытия постов</h3>
+
+      <span>
+        сумма I, L и U по каждому посту
+      </span>
+    </div>
+
+    <div
+      id="statsPostCoverageChart"
+      class="stats-rating-chart"
+      aria-live="polite"
+    ></div>
+  </section>
+
+</div>
+
+<div class="stats-attendance-grid">
+
+  <section class="stats-panel stats-attendance-rating-panel">
+    <div class="stats-panel-heading">
+      <h3>Рейтинг посещаемости операторов</h3>
+
+      <span>
+        явка за выбранный период · НУ не учитывается
+      </span>
+    </div>
+
+    <div
+      id="statsAttendanceRatingChart"
+      class="stats-rating-chart"
+      aria-live="polite"
+    ></div>
+  </section>
+
+  <section class="stats-panel stats-attendance-panel">
+    <div class="stats-panel-heading">
+      <h3>История посещаемости</h3>
+
+      <span>по выбранному периоду</span>
+    </div>
+
+    <div class="stats-risk-table-wrap">
+      <table
+        id="statsAttendanceTable"
+        class="stats-risk-table stats-attendance-table"
+      >
+        <thead>
+          <tr>
+            <th>Дата</th>
+            <th>Присутствуют</th>
+            <th>Отсутствуют</th>
+            <th>Операторов</th>
+            <th>Явка</th>
+          </tr>
+        </thead>
+
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+</div>
+
     </div>
   </div>
 
@@ -403,14 +617,21 @@
         style="width:50px;padding:3px 6px;border:1px solid #cbd5e1;border-radius:4px;text-align:center;"
       >
 
-      <button class="btn-small" onclick="generateRotationPlan()">
+      <button
+        class="btn-small"
+        onclick="generateRotationPlan()"
+      >
         Сгенерировать ротацию
       </button>
     </div>
 
-    <div class="matrix-container" style="overflow-x:auto;">
+    <div
+      class="matrix-container"
+      style="overflow-x:auto;"
+    >
       <table id="rotCalendarTable">
         <thead></thead>
+
         <tbody>
           <tr>
             <td
@@ -427,14 +648,21 @@
   <!-- ПЛАНИНГ РАЗВИТИЯ -->
   <div id="planning" class="tab-content">
     <div class="add-buttons-top">
-      <button class="btn-small" onclick="generateDevelopmentPlan()">
+      <button
+        class="btn-small"
+        onclick="generateDevelopmentPlan()"
+      >
         Сгенерировать план
       </button>
     </div>
 
-    <div class="matrix-container" style="overflow-x:auto;">
+    <div
+      class="matrix-container"
+      style="overflow-x:auto;"
+    >
       <table id="devCalendarTable">
         <thead></thead>
+
         <tbody>
           <tr>
             <td
@@ -450,7 +678,10 @@
 
   <!-- ЖУРНАЛ РАССТАНОВКИ -->
   <div id="placementLog" class="tab-content">
-    <div class="matrix-container" style="overflow-x:auto;">
+    <div
+      class="matrix-container"
+      style="overflow-x:auto;"
+    >
       <table id="placementLogTable">
         <thead>
           <tr>
@@ -478,6 +709,7 @@
 
 <script src="storage.js"></script>
 <script src="app-state.js"></script>
+<script src="stats-module.js"></script>
 <script src="placement-module.js"></script>
 <script src="training-module.js"></script>
 <script src="plans-module.js"></script>

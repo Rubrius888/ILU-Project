@@ -19,6 +19,7 @@ function saveState() {
     data,
     trainingRecords,
     placementLog,
+    statsHistory,
     workshopChief,
     sectionChief,
     filters: filterState
@@ -118,6 +119,10 @@ function loadState() {
     data = state.data;
     trainingRecords = state.trainingRecords;
     placementLog = state.placementLog;
+
+    statsHistory = Array.isArray(state.statsHistory)
+      ? state.statsHistory
+      : [];
 
     workshopChief =
       typeof state.workshopChief === 'string'

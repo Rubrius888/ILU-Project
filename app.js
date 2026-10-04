@@ -19,6 +19,7 @@ if (!restoredState) {
   data = [];
   trainingRecords = [];
   placementLog = [];
+  statsHistory = [];
   placementFilters = {
     dateFrom: '',
     dateTo: '',
@@ -82,11 +83,18 @@ if (emptyPostsRow) {
 }
   document.getElementById('statsTrainingPosts').textContent = trainingPosts;
 
-  // Статистика по операторам (исключая НУ)
-  const totalOps = operators.filter((_, i) => operatorRoles[i] !== 'НУ').length;
+  // Статистика только по собственным операторам участка.
+  // НУ и привлечённые операторы из другого сектора не учитываются.
+  const totalOps = operators.filter((_, i) =>
+    operatorRoles[i] !== 'НУ' &&
+    operatorRoles[i] !== 'ДС'
+  ).length;
   let present = 0, vacation = 0, sick = 0, absent = 0, fired = 0, otherSector = 0;
   for (let c = 0; c < operators.length; c++) {
-    if (operatorRoles[c] === 'НУ') continue;
+    if (
+      operatorRoles[c] === 'НУ' ||
+      operatorRoles[c] === 'ДС'
+    ) continue;
     const att = operatorAttendance[c];
     if (att === 'Я') present++;
     else if (att === 'О') vacation++;

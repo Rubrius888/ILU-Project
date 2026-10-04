@@ -9,7 +9,11 @@ function generateDevelopmentPlan() {
   for (let r = 0; r < posts.length; r++) {
     let countLU = 0;
     for (let c = 0; c < operators.length; c++) {
-      if (operatorRoles[c] === 'НУ' || operatorRoles[c] === 'СО') continue;
+      if (
+        operatorRoles[c] === 'НУ' ||
+        operatorRoles[c] === 'СО' ||
+        operatorRoles[c] === 'ДС'
+      ) continue;
       const lvl = data[r][c];
       if (lvl === 'L' || lvl === 'U') countLU++;
     }
@@ -19,7 +23,11 @@ function generateDevelopmentPlan() {
   // Считаем поливалентность каждого оператора (L/U)
   const opPoly = [];
   for (let c = 0; c < operators.length; c++) {
-    if (operatorRoles[c] === 'НУ' || operatorRoles[c] === 'СО') continue;
+    if (
+      operatorRoles[c] === 'НУ' ||
+      operatorRoles[c] === 'СО' ||
+      operatorRoles[c] === 'ДС'
+    ) continue;
     let count = 0;
     for (let r = 0; r < posts.length; r++) {
       const lvl = data[r][c];
@@ -421,7 +429,9 @@ function addCalendarTraining(event) {
   menu.style.overflowY = 'auto';
 
   let html = '<div style="font-weight:700;padding:8px 12px;color:#0f172a;">Выберите оператора:</div>';
-  operators.forEach(op => {
+  operators.forEach((op, index) => {
+    if (operatorRoles[index] === 'ДС') return;
+
     html += `<div onclick="placeCalendarOp('${op}', ${postIndex}, ${dayIndex}); hideMenu();">${op}</div>`;
   });
   menu.innerHTML = html;
@@ -546,7 +556,11 @@ function generateRotationPlan() {
   const qualifiedOps = posts.map((p, r) => {
     const ops = [];
     for (let c = 0; c < operators.length; c++) {
-      if (operatorRoles[c] === 'НУ' || operatorRoles[c] === 'СО') continue;
+      if (
+        operatorRoles[c] === 'НУ' ||
+        operatorRoles[c] === 'СО' ||
+        operatorRoles[c] === 'ДС'
+      ) continue;
       const lvl = data[r][c];
       if (lvl && lvl !== '') ops.push(c);
     }
@@ -564,7 +578,11 @@ function generateRotationPlan() {
 
     const freeOps = [];
     for (let c = 0; c < operators.length; c++) {
-      if (operatorRoles[c] === 'НУ' || operatorRoles[c] === 'СО') continue;
+      if (
+        operatorRoles[c] === 'НУ' ||
+        operatorRoles[c] === 'СО' ||
+        operatorRoles[c] === 'ДС'
+      ) continue;
       if (!operatorLastDay[c] || operatorLastDay[c] <= d) freeOps.push(c);
     }
 
@@ -776,7 +794,11 @@ function addRotationOp(event) {
 
   // Фильтруем операторов: только те, кто знает этот пост
   const qualified = operators.filter((op, idx) => {
-    if (operatorRoles[idx] === 'НУ' || operatorRoles[idx] === 'СО') return false;
+    if (
+      operatorRoles[idx] === 'НУ' ||
+      operatorRoles[idx] === 'СО' ||
+      operatorRoles[idx] === 'ДС'
+    ) return false;
     const lvl = data[postIndex][idx];
     return lvl && lvl !== '';
   });
