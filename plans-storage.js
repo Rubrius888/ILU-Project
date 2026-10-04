@@ -117,6 +117,23 @@ function restorePlan(type, tableId, color) {
 
       cell.textContent = value;
 
+      // Последняя колонка планинга развития — срок обучения,
+      // а не ячейка календаря и не место для оператора.
+      const isDevelopmentDurationCell =
+        type === 'development' &&
+        columnIndex === values.length - 1;
+
+      if (isDevelopmentDurationCell) {
+        cell.dataset.post = rowIndex;
+        cell.dataset.duration = 'true';
+        cell.style.cursor = 'pointer';
+        cell.style.fontWeight = '600';
+        cell.onclick = function (event) {
+          editDevelopmentDuration(event);
+        };
+        return;
+      }
+
       if (columnIndex === 0) {
         cell.style.fontWeight = '600';
         return;

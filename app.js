@@ -1,6 +1,42 @@
 
 const restoredState = loadState();
 
+/*
+ * Чистая новая матрица при первом запуске.
+ * Если данные уже сохранены, они не изменяются.
+ */
+if (!restoredState) {
+  posts = [];
+  operators = [];
+
+  difficulty = [];
+  ergonomics = [];
+  trainingDays = [];
+
+  attendanceData = [];
+  operatorAttendance = [];
+  operatorRoles = [];
+  data = [];
+
+  trainingRecords = [];
+  placementLog = [];
+
+  placementFilters = {
+    dateFrom: '',
+    dateTo: '',
+    operators: [],
+    posts: []
+  };
+
+  placementSort = {
+    key: 'date',
+    direction: 'desc'
+  };
+
+  workshopChief = '';
+  sectionChief = '';
+}
+
 //Восстановление фильтров департамент, цех, участок, смена
 function restoreSavedFilters() {
   const filters = {

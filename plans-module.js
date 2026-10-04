@@ -30,13 +30,25 @@ function generateDevelopmentPlan() {
 
   const virtualCoverage = postCoverage.map(p => p.coverage);
 
+  // В план развития можно добавлять только операторов,
+  // которым ещё требуется обучение на этом посту.
+  // Lкр уже находится в обучении на L, а L и U уже освоены.
+  function isDevelopmentCandidate(level) {
+    return (
+      level === null ||
+      level === '' ||
+      level === 'I' ||
+      level === 'Iкр'
+    );
+  }
+
   function findBestPost(opIndex) {
     const quickPosts = [];
     const otherPosts = [];
     for (const p of postCoverage) {
       const lvl = data[p.index][opIndex];
       if (lvl === 'I' || lvl === 'Iкр') quickPosts.push(p);
-      else if (lvl === null || lvl === '' || lvl === 'L') otherPosts.push(p);
+      else if (isDevelopmentCandidate(lvl)) otherPosts.push(p);
     }
     quickPosts.sort((a, b) => virtualCoverage[a.index] - virtualCoverage[b.index]);
     otherPosts.sort((a, b) => virtualCoverage[a.index] - virtualCoverage[b.index]);
@@ -57,11 +69,13 @@ function generateDevelopmentPlan() {
       for (const o of sortedOps) {
         if (usedOps.has(o.index)) continue;
         const lvl = data[p.index][o.index];
-        if (lvl === 'I' || lvl === 'Iкр') { bestOp = o; usedOps.add(o.index); break; }
+        if (isDevelopmentCandidate(lvl)) { bestOp = o; usedOps.add(o.index); break; }
       }
       if (!bestOp) {
         for (const o of sortedOps) {
           if (usedOps.has(o.index)) continue;
+          const lvl = data[p.index][o.index];
+          if (!isDevelopmentCandidate(lvl)) continue;
           bestOp = o; usedOps.add(o.index); break;
         }
       }
@@ -98,11 +112,13 @@ function generateDevelopmentPlan() {
         for (const o of sortedOps) {
           if (usedOps.has(o.index)) continue;
           const lvl = data[p.index][o.index];
-          if (lvl === 'I' || lvl === 'Iкр' || lvl === 'L') { bestOp = o; usedOps.add(o.index); break; }
+          if (isDevelopmentCandidate(lvl)) { bestOp = o; usedOps.add(o.index); break; }
         }
         if (!bestOp) {
           for (const o of sortedOps) {
             if (usedOps.has(o.index)) continue;
+            const lvl = data[p.index][o.index];
+            if (!isDevelopmentCandidate(lvl)) continue;
             bestOp = o; usedOps.add(o.index); break;
           }
         }
@@ -252,6 +268,14 @@ function generateDevelopmentPlan() {
     cells.forEach((td, colIndex) => {
       if (colIndex === 0 || colIndex > daysInMonth) {
         td.setAttribute('data-post', r);
+        if (colIndex === daysInMonth + 1) {
+          td.setAttribute('data-duration', 'true');
+          td.style.cursor = 'pointer';
+          td.style.fontWeight = '600';
+          td.onclick = function(e) {
+            editDevelopmentDuration(e);
+          };
+        }
         td.setAttribute('data-day', colIndex - 1);
         return;
       }
@@ -282,6 +306,52 @@ function generateDevelopmentPlan() {
 }
 
 // ======================== РЕДАКТИРОВАНИЕ И УДАЛЕНИЕ ОБУЧЕНИЙ ========================
+function editDevelopmentDuration(event) {
+  event.stopPropagation();
+  hideMenu();
+
+  const td = event.currentTarget || event.target;
+  const postIndex = Number(td.getAttribute('data-post'));
+
+  if (!Number.isInteger(postIndex) || !posts[postIndex]) {
+    return;
+  }
+
+  const currentValue = Number(trainingDays[postIndex]) ||
+    Number.parseInt(td.textContent, 10) ||
+    1;
+
+  const input = prompt(
+    'Введите срок обучения в рабочих днях:',
+    String(currentValue)
+  );
+
+  if (input === null) {
+    return;
+  }
+
+  const days = Number(input.trim());
+
+  if (!Number.isInteger(days) || days < 1 || days > 365) {
+    alert('Введите целое число рабочих дней от 1 до 365.');
+    return;
+  }
+
+  trainingDays[postIndex] = days;
+  td.textContent = String(days);
+  saveState();
+
+  // Сохраняем изменённое значение в сохранённом планинге.
+  if (typeof capturePlan === 'function') {
+    capturePlan('development', 'devCalendarTable');
+    restorePlan(
+      'development',
+      'devCalendarTable',
+      '#2563eb'
+    );
+  }
+}
+
 function editCalendarCell(event) {
   event.stopPropagation();
   hideMenu();
@@ -305,7 +375,13 @@ function deleteCalendarTraining(opName) {
   const tbody = document.querySelector('#devCalendarTable tbody');
   if (!tbody) return;
   const allTd = tbody.querySelectorAll('td[data-op="' + opName + '"]');
+  const affectedRows = new Set();
+
   allTd.forEach(td => {
+    if (td.parentElement) {
+      affectedRows.add(td.parentElement);
+    }
+
     td.textContent = '+';
     td.style.color = '#94a3b8';
     td.style.fontSize = '16px';
@@ -313,6 +389,21 @@ function deleteCalendarTraining(opName) {
     td.style.cursor = 'pointer';
     td.onclick = function(e) { addCalendarTraining(e); };
     td.removeAttribute('data-op');
+  });
+
+  // Если в строке больше не осталось операторов,
+  // очищаем и срок обучения этой строки.
+  affectedRows.forEach(row => {
+    const hasOperator = row.querySelector('td[data-op]');
+    if (hasOperator) return;
+
+    const durationCell =
+      row.querySelector('td[data-duration="true"]') ||
+      row.lastElementChild;
+
+    if (durationCell) {
+      durationCell.textContent = '';
+    }
   });
 }
 

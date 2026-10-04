@@ -52,14 +52,38 @@
   </div>
 
   <div class="export-buttons">
-    <button
-  class="btn-small"
-  type="button"
-  onclick="window.exportCurrentTableToExcel()"
->
-  📊 Скачать Excel
-</button>
-  </div>
+  <button
+    class="btn-small"
+    type="button"
+    onclick="window.exportCurrentTableToExcel()"
+  >
+    📊 Скачать Excel
+  </button>
+
+  <button
+    class="btn-small"
+    type="button"
+    onclick="window.exportApplicationBackup()"
+  >
+    💾 Сохранить базу
+  </button>
+
+  <button
+    class="btn-small"
+    type="button"
+    onclick="document.getElementById('backupFileInput').click()"
+  >
+    📂 Загрузить базу
+  </button>
+
+  <input
+    id="backupFileInput"
+    type="file"
+    accept="application/json,.json"
+    style="display:none"
+    onchange="window.importApplicationBackup(event)"
+  >
+</div>
 
   <!-- КАЛЕНДАРЬ + ДАННЫЕ + ПАНЕЛЬ -->
   <div class="middle-row">
@@ -198,5 +222,6 @@
 <script src="app.js"></script>
 <script src="plans-storage.js"></script>
 <script src="excel-export.js"></script>
+<script src="backup-module.js"></script>
 </body>
 </html>
