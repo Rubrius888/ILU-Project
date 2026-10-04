@@ -13,203 +13,469 @@
   <div class="header-card">
     <img src="logo.png" alt="Логотип" class="logo">
     <img src="emblem.png" alt="Эмблема" class="emblem">
+
     <div class="filter-group">
       <label>Департамент</label>
       <select id="filterDepartment">
-        <option>Сборка</option><option>Окраска</option><option>Сварка</option>
+        <option>Сборка</option>
+        <option>Окраска</option>
+        <option>Сварка</option>
       </select>
     </div>
+
     <div class="filter-group">
       <label>Цех</label>
       <select id="filterWorkshop">
-        <option>Цех сборки салона</option><option>Цех сборки механики</option>
+        <option>Цех сборки салона</option>
+        <option>Цех сборки механики</option>
       </select>
     </div>
+
     <div class="filter-group">
       <label>Участок</label>
       <select id="filterSection">
-        <option>Участок сборки салона 2</option><option>Участок сборки салона 4</option>
-        <option>Участок сборки салона 8</option><option>Участок сборки механики 1</option>
-        <option>Участок сборки механики 3</option><option>Участок сборки механики 5</option>
+        <option>Участок сборки салона 2</option>
+        <option>Участок сборки салона 4</option>
+        <option>Участок сборки салона 8</option>
+        <option>Участок сборки механики 1</option>
+        <option>Участок сборки механики 3</option>
+        <option>Участок сборки механики 5</option>
       </select>
     </div>
+
     <div class="filter-group">
       <label>Смена</label>
       <select id="filterShift">
-        <option selected>A</option><option>B</option><option>C</option>
+        <option selected>A</option>
+        <option>B</option>
+        <option>C</option>
       </select>
     </div>
   </div>
 
   <!-- ВКЛАДКИ -->
   <div class="tabs">
-    <button class="tab active" onclick="openTab(event, 'matrix')">Матрица ILU</button>
-    <button class="tab" onclick="openTab(event, 'stats')">Статистика</button>
-    <button class="tab" onclick="openTab(event, 'training')">Обучения операторов</button>
-    <button class="tab" onclick="openTab(event, 'rotation')">Планинг ротации</button>
-    <button class="tab" onclick="openTab(event, 'planning')">Планинг развития</button>
-    <button class="tab" onclick="openTab(event, 'placementLog')">Журнал расстановки</button>
+    <button class="tab active" onclick="openTab(event, 'matrix')">
+      Матрица ILU
+    </button>
+
+    <button class="tab" onclick="openTab(event, 'stats')">
+      Статистика
+    </button>
+
+    <button class="tab" onclick="openTab(event, 'training')">
+      Обучения операторов
+    </button>
+
+    <button class="tab" onclick="openTab(event, 'rotation')">
+      Планинг ротации
+    </button>
+
+    <button class="tab" onclick="openTab(event, 'planning')">
+      Планинг развития
+    </button>
+
+    <button class="tab" onclick="openTab(event, 'placementLog')">
+      Журнал расстановки
+    </button>
   </div>
-
-  <div class="export-buttons">
-  <button
-    class="btn-small"
-    type="button"
-    onclick="window.exportCurrentTableToExcel()"
-  >
-    📊 Скачать Excel
-  </button>
-
-  <button
-    class="btn-small"
-    type="button"
-    onclick="window.exportApplicationBackup()"
-  >
-    💾 Сохранить базу
-  </button>
-
-  <button
-    class="btn-small"
-    type="button"
-    onclick="document.getElementById('backupFileInput').click()"
-  >
-    📂 Загрузить базу
-  </button>
-
-  <input
-    id="backupFileInput"
-    type="file"
-    accept="application/json,.json"
-    style="display:none"
-    onchange="window.importApplicationBackup(event)"
-  >
-</div>
 
   <!-- КАЛЕНДАРЬ + ДАННЫЕ + ПАНЕЛЬ -->
   <div class="middle-row">
+
     <div class="date-bar" id="dateBar"></div>
+
     <div class="info-card">
-      <div class="info-row"><span class="info-label">ДЕПАРТАМЕНТ:</span><span class="info-value" id="infoDepartment">—</span></div>
-      <div class="info-row"><span class="info-label">ЦЕХ:</span><span class="info-value" id="infoWorkshop">—</span></div>
-      <div class="info-row"><span class="info-label">НЦ:</span><span class="info-value clickable" id="infoWorkshopChief" onclick="editChief('workshop')">—</span></div>
-      <div class="info-row"><span class="info-label">УЧАСТОК:</span><span class="info-value" id="infoSection">—</span></div>
-      <div class="info-row"><span class="info-label">СМЕНА:</span><span class="info-value" id="infoShift">—</span></div>
-      <div class="info-row"><span class="info-label">НУ:</span><span class="info-value clickable" id="infoSectionChief" onclick="editChief('section')">—</span></div>
+      <div class="info-row">
+        <span class="info-label">ДЕПАРТАМЕНТ:</span>
+        <span class="info-value" id="infoDepartment">—</span>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">ЦЕХ:</span>
+        <span class="info-value" id="infoWorkshop">—</span>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">НЦ:</span>
+        <span
+          class="info-value clickable"
+          id="infoWorkshopChief"
+          onclick="editChief('workshop')"
+        >—</span>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">УЧАСТОК:</span>
+        <span class="info-value" id="infoSection">—</span>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">СМЕНА:</span>
+        <span class="info-value" id="infoShift">—</span>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">НУ:</span>
+        <span
+          class="info-value clickable"
+          id="infoSectionChief"
+          onclick="editChief('section')"
+        >—</span>
+      </div>
     </div>
+
     <div class="stats-card" id="statsCard">
-      <div class="info-row"><span class="info-label">КОЛИЧЕСТВО ПОСТОВ В ILU:</span><span class="info-value" id="statsTotalPosts">0</span></div>
-      <div class="info-row"><span class="info-label">ЗАПОЛНЕНО ПОСТОВ:</span><span class="info-value" id="statsFilledPosts">0</span></div>
-      <div class="info-row"><span class="info-label">ПОСТЫ С ОБУЧЕНИЕМ:</span><span class="info-value" id="statsTrainingPosts">0</span></div>
+      <div class="info-row">
+        <span class="info-label">КОЛИЧЕСТВО ПОСТОВ В ILU:</span>
+        <span class="info-value" id="statsTotalPosts">0</span>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">ЗАПОЛНЕНО ПОСТОВ:</span>
+        <span class="info-value" id="statsFilledPosts">0</span>
+      </div>
+
+      <div class="info-row" id="statsEmptyPostsRow">
+        <span class="info-label">НЕ ЗАПОЛНЕНО ПОСТОВ:</span>
+        <span class="info-value" id="statsEmptyPosts">0</span>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">ПОСТЫ С ОБУЧЕНИЕМ:</span>
+        <span class="info-value" id="statsTrainingPosts">0</span>
+      </div>
     </div>
+
     <div class="stats-card" id="statsOperatorsCard">
-      <div class="info-row"><span class="info-label">КОЛИЧЕСТВО ОПЕРАТОРОВ В ILU:</span><span class="info-value" id="statsTotalOps">0</span></div>
-      <div class="info-row"><span class="info-label">ПРИСУТСТВУЕТ:</span><span class="info-value" id="statsPresent">0</span></div>
-      <div class="info-row"><span class="info-label">ОТПУСК:</span><span class="info-value" id="statsVacation">0</span></div>
-      <div class="info-row"><span class="info-label">БОЛЬНИЧНЫЙ:</span><span class="info-value" id="statsSick">0</span></div>
-      <div class="info-row"><span class="info-label">НЕ ЯВКА:</span><span class="info-value" id="statsAbsent">0</span></div>
-      <div class="info-row"><span class="info-label">УВОЛЬНЕНИЕ:</span><span class="info-value" id="statsFired">0</span></div>
-      <div class="info-row"><span class="info-label">В ДРУГОМ СЕКТОРЕ:</span><span class="info-value" id="statsOtherSector">0</span></div>
+      <div class="info-row">
+        <span class="info-label">КОЛИЧЕСТВО ОПЕРАТОРОВ В ILU:</span>
+        <span class="info-value" id="statsTotalOps">0</span>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">ПРИСУТСТВУЕТ:</span>
+        <span class="info-value" id="statsPresent">0</span>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">ОТПУСК:</span>
+        <span class="info-value" id="statsVacation">0</span>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">БОЛЬНИЧНЫЙ:</span>
+        <span class="info-value" id="statsSick">0</span>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">НЕ ЯВКА:</span>
+        <span class="info-value" id="statsAbsent">0</span>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">УВОЛЬНЕНИЕ:</span>
+        <span class="info-value" id="statsFired">0</span>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">В ДРУГОМ СЕКТОРЕ:</span>
+        <span class="info-value" id="statsOtherSector">0</span>
+      </div>
     </div>
+
     <div class="stats-card" id="statsPolyvalenceCard">
-      <div class="info-row"><span class="info-label">ПОЛИВАЛЕНТНОСТЬ УЧАСТКА</span></div>
-      <div class="info-row"><span class="info-label">Общая 2L:</span><span class="info-value" id="statsTotal2L">0%</span></div>
-      <div class="info-row"><span class="info-label">Общая 3L:</span><span class="info-value" id="statsTotal3L">0%</span></div>
-      <div class="info-row"><span class="info-label">По постам 2L:</span><span class="info-value" id="statsPosts2L">0%</span></div>
-      <div class="info-row"><span class="info-label">По постам 3L:</span><span class="info-value" id="statsPosts3L">0%</span></div>
-      <div class="info-row"><span class="info-label">По операторам 2L:</span><span class="info-value" id="statsOps2L">0%</span></div>
-      <div class="info-row"><span class="info-label">По операторам 3L:</span><span class="info-value" id="statsOps3L">0%</span></div>
+      <div class="info-row">
+        <span class="info-label">ПОЛИВАЛЕНТНОСТЬ УЧАСТКА</span>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">Общая 2L:</span>
+        <span class="info-value" id="statsTotal2L">0%</span>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">Общая 3L:</span>
+        <span class="info-value" id="statsTotal3L">0%</span>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">По постам 2L:</span>
+        <span class="info-value" id="statsPosts2L">0%</span>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">По постам 3L:</span>
+        <span class="info-value" id="statsPosts3L">0%</span>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">По операторам 2L:</span>
+        <span class="info-value" id="statsOps2L">0%</span>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">По операторам 3L:</span>
+        <span class="info-value" id="statsOps3L">0%</span>
+      </div>
     </div>
+
+    <!-- КОМПАКТНАЯ ПАНЕЛЬ ДЕЙСТВИЙ СПРАВА -->
+    <div class="export-buttons" aria-label="Действия с данными">
+      <span class="toolbar-label">Действия</span>
+
+      <button
+        class="btn-small"
+        type="button"
+        onclick="window.exportCurrentTableToExcel()"
+      >
+        📊 Скачать Excel
+      </button>
+
+      <button
+        class="btn-small"
+        type="button"
+        onclick="window.exportApplicationBackup()"
+      >
+        💾 Сохранить базу
+      </button>
+
+      <button
+        class="btn-small"
+        type="button"
+        onclick="document.getElementById('backupFileInput').click()"
+      >
+        📂 Загрузить базу
+      </button>
+
+      <input
+        id="backupFileInput"
+        type="file"
+        accept="application/json,.json"
+        hidden
+        onchange="window.importApplicationBackup(event)"
+      >
+    </div>
+
   </div>
 
-  <!-- КОНТЕНТ ВКЛАДОК -->
+  <!-- МАТРИЦА -->
   <div id="matrix" class="tab-content active">
-    <div class="add-buttons-top">
-      <button class="btn-small" onclick="addOperator()">+ Оператор</button>
-      <button class="btn-small" onclick="addPost()">+ Пост</button>
+
+    <div id="matrixAddActions" class="add-buttons-top">
+      <button class="btn-small" onclick="addOperator()">
+        + Оператор
+      </button>
+
+      <button class="btn-small" onclick="addPost()">
+        + Пост
+      </button>
     </div>
-    <div class="matrix-container">
+
+    <div id="emptyMatrixState" class="empty-matrix-state" hidden>
+      <div class="empty-matrix-icon">▦</div>
+
+      <h3>Матрица пока не заполнена</h3>
+
+      <p id="emptyMatrixHint">
+        Добавьте первый пост и первого оператора, чтобы начать работу.
+      </p>
+
+      <div class="empty-matrix-actions">
+        <button class="btn-small" type="button" onclick="addPost()">
+          + Добавить пост
+        </button>
+
+        <button class="btn-small" type="button" onclick="addOperator()">
+          + Добавить оператора
+        </button>
+      </div>
+    </div>
+
+    <div id="matrixTableContainer" class="matrix-container">
       <table id="iluTable">
         <thead></thead>
         <tbody></tbody>
       </table>
+
       <div class="legend">
-        <span><span class="dot" style="background:#fef9c3;"></span> I — Новичок</span>
-        <span><span class="dot" style="background:#fef9c3; color:#ef4444; font-weight:900;"></span> Iкр — Обучается на I</span>
-        <span><span class="dot" style="background:#fed7aa;"></span> L — Опытный</span>
-        <span><span class="dot" style="background:#fed7aa; color:#ef4444; font-weight:900;"></span> Lкр — Обучается на L</span>
-        <span><span class="dot" style="background:#fecaca;"></span> U — Мастер-форматор</span>
-        <span>○ Стоит на посту &nbsp; △ Обучается</span>
+        <span>
+          <span class="dot" style="background:#fef9c3;"></span>
+          I — Новичок
+        </span>
+
+        <span>
+          <span
+            class="dot"
+            style="background:#fef9c3;color:#ef4444;font-weight:900;"
+          ></span>
+          Iкр — Обучается на I
+        </span>
+
+        <span>
+          <span class="dot" style="background:#fed7aa;"></span>
+          L — Опытный
+        </span>
+
+        <span>
+          <span
+            class="dot"
+            style="background:#fed7aa;color:#ef4444;font-weight:900;"
+          ></span>
+          Lкр — Обучается на L
+        </span>
+
+        <span>
+          <span class="dot" style="background:#fecaca;"></span>
+          U — Мастер-форматор
+        </span>
+
+        <span>
+          ○ Стоит на посту &nbsp; △ Обучается
+        </span>
       </div>
     </div>
   </div>
 
-  <div id="stats" class="tab-content"><div class="placeholder">📊 Статистика (будет заполнена позже)</div></div>
+  <!-- СТАТИСТИКА -->
+  <div id="stats" class="tab-content">
+    <div class="placeholder">
+      📊 Статистика (будет заполнена позже)
+    </div>
+  </div>
 
+  <!-- ОБУЧЕНИЯ -->
   <div id="training" class="tab-content">
     <div class="add-buttons-top">
-      <button class="btn-small" onclick="addTrainingRecord()">+ Добавить запись</button>
+      <button class="btn-small" onclick="addTrainingRecord()">
+        + Добавить запись
+      </button>
     </div>
+
     <div class="matrix-container" style="overflow-x:auto;">
       <table id="trainingTable">
         <thead>
           <tr>
-            <th>Год</th><th>Месяц</th><th>Неделя начала</th><th>Неделя окончания</th>
-            <th>Пост</th><th>Оператор</th><th>Уровень</th><th>Статус</th>
-            <th>Форматор</th><th>Дата начала обучения</th><th>Дата валидации</th>
-            <th>Срок обучения</th><th>Комментарий</th><th></th>
+            <th>Год</th>
+            <th>Месяц</th>
+            <th>Неделя начала</th>
+            <th>Неделя окончания</th>
+            <th>Пост</th>
+            <th>Оператор</th>
+            <th>Уровень</th>
+            <th>Статус</th>
+            <th>Форматор</th>
+            <th>Дата начала обучения</th>
+            <th>Дата валидации</th>
+            <th>Срок обучения</th>
+            <th>Комментарий</th>
+            <th></th>
           </tr>
         </thead>
+
         <tbody>
-          <tr><td colspan="14" style="text-align:center;color:#94a3b8;padding:40px;">Нет записей. Нажмите «+ Добавить запись»</td></tr>
+          <tr>
+            <td
+              colspan="14"
+              style="text-align:center;color:#94a3b8;padding:40px;"
+            >
+              Нет записей. Нажмите «+ Добавить запись»
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
   </div>
 
+  <!-- РОТАЦИЯ -->
   <div id="rotation" class="tab-content">
     <div class="add-buttons-top" style="gap:8px;">
-      <span style="font-size:13px;color:#475569;">Ротаций в день:</span>
-      <input type="number" id="rotationsPerDay" value="1" min="1" max="5" style="width:50px;padding:3px 6px;border:1px solid #cbd5e1;border-radius:4px;text-align:center;">
-      <button class="btn-small" onclick="generateRotationPlan()">Сгенерировать ротацию</button>
+      <span style="font-size:13px;color:#475569;">
+        Ротаций в день:
+      </span>
+
+      <input
+        type="number"
+        id="rotationsPerDay"
+        value="1"
+        min="1"
+        max="5"
+        style="width:50px;padding:3px 6px;border:1px solid #cbd5e1;border-radius:4px;text-align:center;"
+      >
+
+      <button class="btn-small" onclick="generateRotationPlan()">
+        Сгенерировать ротацию
+      </button>
     </div>
+
     <div class="matrix-container" style="overflow-x:auto;">
       <table id="rotCalendarTable">
         <thead></thead>
         <tbody>
-          <tr><td style="text-align:center;color:#94a3b8;padding:40px;">Нажмите «Сгенерировать ротацию»</td></tr>
+          <tr>
+            <td
+              style="text-align:center;color:#94a3b8;padding:40px;"
+            >
+              Нажмите «Сгенерировать ротацию»
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
   </div>
 
+  <!-- ПЛАНИНГ РАЗВИТИЯ -->
   <div id="planning" class="tab-content">
     <div class="add-buttons-top">
-      <button class="btn-small" onclick="generateDevelopmentPlan()">Сгенерировать план</button>
+      <button class="btn-small" onclick="generateDevelopmentPlan()">
+        Сгенерировать план
+      </button>
     </div>
+
     <div class="matrix-container" style="overflow-x:auto;">
       <table id="devCalendarTable">
         <thead></thead>
         <tbody>
-          <tr><td style="text-align:center;color:#94a3b8;padding:40px;">Нажмите «Сгенерировать план»</td></tr>
+          <tr>
+            <td
+              style="text-align:center;color:#94a3b8;padding:40px;"
+            >
+              Нажмите «Сгенерировать план»
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
   </div>
 
+  <!-- ЖУРНАЛ РАССТАНОВКИ -->
   <div id="placementLog" class="tab-content">
     <div class="matrix-container" style="overflow-x:auto;">
       <table id="placementLogTable">
         <thead>
-          <tr><th>Дата</th><th>Оператор</th><th>Пост</th></tr>
+          <tr>
+            <th>Дата</th>
+            <th>Оператор</th>
+            <th>Пост</th>
+          </tr>
         </thead>
+
         <tbody>
-          <tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:40px;">Журнал пуст. Поставьте оператора на пост в Матрице ILU.</td></tr>
+          <tr>
+            <td
+              colspan="3"
+              style="text-align:center;color:#94a3b8;padding:40px;"
+            >
+              Журнал пуст. Поставьте оператора на пост в Матрице ILU.
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
   </div>
 
 </div>
+
 <script src="storage.js"></script>
 <script src="app-state.js"></script>
 <script src="placement-module.js"></script>
@@ -223,5 +489,6 @@
 <script src="plans-storage.js"></script>
 <script src="excel-export.js"></script>
 <script src="backup-module.js"></script>
+
 </body>
 </html>

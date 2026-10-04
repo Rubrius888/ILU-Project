@@ -2,37 +2,33 @@
 const restoredState = loadState();
 
 /*
- * Чистая новая матрица при первом запуске.
- * Если данные уже сохранены, они не изменяются.
+ * Новая установка должна открываться как чистый шаблон.
+ * Если сохранённой матрицы нет, не показываем встроенные демонстрационные
+ * данные разработчика. На компьютере владельца loadState() вернёт true,
+ * поэтому его существующая матрица будет восстановлена без изменений.
  */
 if (!restoredState) {
   posts = [];
   operators = [];
-
   difficulty = [];
   ergonomics = [];
   trainingDays = [];
-
   attendanceData = [];
   operatorAttendance = [];
   operatorRoles = [];
   data = [];
-
   trainingRecords = [];
   placementLog = [];
-
   placementFilters = {
     dateFrom: '',
     dateTo: '',
     operators: [],
     posts: []
   };
-
   placementSort = {
     key: 'date',
     direction: 'desc'
   };
-
   workshopChief = '';
   sectionChief = '';
 }
@@ -75,8 +71,15 @@ function updateStatsCard() {
     if (hasOperator) filledPosts++;
     if (hasTraining) trainingPosts++;
   }
+  const emptyPosts = totalPosts - filledPosts;
   document.getElementById('statsTotalPosts').textContent = totalPosts;
   document.getElementById('statsFilledPosts').textContent = filledPosts;
+  document.getElementById('statsEmptyPosts').textContent = emptyPosts;
+  const emptyPostsRow = document.getElementById('statsEmptyPostsRow');
+
+if (emptyPostsRow) {
+  emptyPostsRow.classList.toggle('is-danger', emptyPosts > 0);
+}
   document.getElementById('statsTrainingPosts').textContent = trainingPosts;
 
   // Статистика по операторам (исключая НУ)

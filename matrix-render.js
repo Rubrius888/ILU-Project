@@ -3,6 +3,53 @@ function renderMatrix() {
   // Получаем ссылки на заголовок и тело таблицы
   const thead = document.querySelector('#iluTable thead');
   const tbody = document.querySelector('#iluTable tbody');
+  const matrixTableContainer = document.getElementById('matrixTableContainer');
+  const emptyMatrixState = document.getElementById('emptyMatrixState');
+  const emptyMatrixHint = document.getElementById('emptyMatrixHint');
+  const matrixAddActions = document.getElementById('matrixAddActions');
+
+  const matrixIsEmpty = posts.length === 0 || operators.length === 0;
+
+  if (matrixTableContainer) {
+    matrixTableContainer.hidden = matrixIsEmpty;
+  }
+
+  if (emptyMatrixState) {
+    emptyMatrixState.hidden = !matrixIsEmpty;
+  }
+
+  if (matrixAddActions) {
+    matrixAddActions.hidden = matrixIsEmpty;
+  }
+
+  if (emptyMatrixHint && matrixIsEmpty) {
+    if (posts.length === 0 && operators.length === 0) {
+      emptyMatrixHint.textContent =
+        'Добавьте первый пост и первого оператора, чтобы начать работу.';
+    } else if (posts.length === 0) {
+      emptyMatrixHint.textContent =
+        'Сначала добавьте хотя бы один пост.';
+    } else {
+      emptyMatrixHint.textContent =
+        'Сначала добавьте хотя бы одного оператора.';
+    }
+  }
+
+  if (matrixIsEmpty) {
+    thead.innerHTML = '';
+    tbody.innerHTML = '';
+    window._polyData = {
+      percent2L: 0,
+      percent3L: 0,
+      percentOps2L: 0,
+      percentOps3L: 0,
+      total2L: 0,
+      total3L: 0
+    };
+    updateStatsCard();
+    saveState();
+    return;
+  }
 
   // ----- АКТИВНОСТЬ ОПЕРАТОРОВ -----
   // Вычисляем, активен ли каждый оператор (стоит или обучается на любом посту)
@@ -20,13 +67,13 @@ function renderMatrix() {
   thead.innerHTML = '<tr><th></th><th></th><th></th><th></th>' + operators.map((o, idx) => {
     const role = operatorRoles[idx];
     // При клике на должность вызываем выбор из списка
-    return `<th colspan="2" style="cursor:pointer;font-size:11px;color:#64748b;" onclick="cycleOperatorRole(${idx})">${role}</th>`;
+    return `<th colspan="2" data-operator-index="${idx}" style="cursor:pointer;font-size:11px;color:#64748b;" onclick="cycleOperatorRole(${idx})">${role}</th>`;
   }).join('') + '</tr>';
 
   // ----- ЗАГОЛОВОК 1: ФАМИЛИИ ОПЕРАТОРОВ + СТОЛБЦЫ СПРАВА -----
   const trNames = document.createElement('tr');
   trNames.innerHTML = '<th>Пост</th><th>Сл.</th><th>Эрг.</th><th>Срок обучения до I</th>' + operators.map((o, idx) => {
-    return `<th colspan="2" style="cursor:pointer;" onclick="showOperatorMenu(event, '${o}')">${o}</th>`;
+    return `<th colspan="2" data-operator-index="${idx}" style="cursor:pointer;" onclick="showOperatorMenu(event, '${o}')">${o}</th>`;
   }).join('')
     + '<th rowspan="2" style="vertical-align:middle;"><span style="writing-mode:sideways-lr;">Покрытие U</span></th>'
     + '<th rowspan="2" style="vertical-align:middle;"><span style="writing-mode:sideways-lr;">Поливал. 3L</span></th>'
@@ -38,7 +85,7 @@ function renderMatrix() {
   trSub.innerHTML = '<th></th><th></th><th></th><th></th>' + operators.map((o, idx) => {
     // Если оператор активен, подкрашиваем ячейку серым
     const bg = operatorActive[idx] ? 'background:#cbd5e1;' : '';
-    return `<th style="${bg}"><span style="writing-mode:sideways-lr;">Статус</span></th><th style="${bg}"><span style="writing-mode:sideways-lr;">Уровень</span></th>`;
+    return `<th data-operator-index="${idx}" style="${bg}"><span style="writing-mode:sideways-lr;">Статус</span></th><th data-operator-index="${idx}" style="${bg}"><span style="writing-mode:sideways-lr;">Уровень</span></th>`;
   }).join('');
   thead.appendChild(trSub);
 
@@ -46,6 +93,7 @@ function renderMatrix() {
   tbody.innerHTML = '';
   for (let r = 0; r < posts.length; r++) {
     const tr = document.createElement('tr');
+    tr.dataset.postIndex = r;
     const postName = posts[r];
 
     // Активна ли строка поста (есть ли на нём кто-то)
@@ -87,13 +135,26 @@ function renderMatrix() {
 
     // ----- ЯЧЕЙКИ ОПЕРАТОРОВ: СТАТУС НА ПОСТУ И УРОВЕНЬ ILU -----
     for (let c = 0; c < operators.length; c++) {
-      // Статус на посту (○ стоит, △ обучается, пусто)
+      // Статус на посту
       const tdPost = document.createElement('td');
+
+      tdPost.dataset.operatorIndex = c;
+
       const postStatus = attendanceData[r][c];
-      tdPost.textContent = postStatus;
+
       tdPost.className = 'cell';
-      if (postStatus === '○') tdPost.classList.add('status-ya');
-      if (postStatus === '△') tdPost.classList.add('status-ob');
+
+      if (postStatus === '○') {
+        tdPost.classList.add('status-ya');
+
+        tdPost.innerHTML =
+          '<span class="status-marker status-marker-present" aria-label="Стоит на посту"></span>';
+      } else if (postStatus === '△') {
+        tdPost.classList.add('status-ob');
+
+        tdPost.innerHTML =
+          '<span class="status-marker status-marker-training" aria-label="Обучается"></span>';
+      }
             
             // Проверяем давность стояния на посту (только если знает пост)
       try {
@@ -114,6 +175,7 @@ function renderMatrix() {
 
       // Уровень ILU
       const tdLvl = document.createElement('td');
+      tdLvl.dataset.operatorIndex = c;
       const lvl = data[r][c];
       tdLvl.textContent = lvl || '';
       tdLvl.className = 'cell';
@@ -236,7 +298,7 @@ function renderMatrix() {
     if (att === 'С') color = '#ea580c';
     if (att === 'У') { color = '#64748b'; }
     const label = att === 'Я' ? 'Явка' : att === 'Н' ? 'Неявка' : att === 'Б' ? 'Больничный' : att === 'О' ? 'Отпуск' : att === 'С' ? 'В др. секторе' : 'Уволен';
-    return `<td colspan="2" style="color:${color};cursor:pointer;font-weight:700;font-size:12px;" onclick="cycleOperatorAttendance(${idx})">${label}</td>`;
+    return `<td colspan="2" data-operator-index="${idx}" style="color:${color};cursor:pointer;font-weight:700;font-size:12px;" onclick="cycleOperatorAttendance(${idx})">${label}</td>`;
   }).join('')
     + `<td style="font-weight:700;font-size:14px;color:#166534;">${percentU}%</td>`
     + `<td style="font-weight:700;font-size:14px;color:#166534;">${percent3L}%</td>`
@@ -249,7 +311,7 @@ function renderMatrix() {
     const count = getOperatorPolyvalence(idx);
     const isYes = count >= 3;
     const bg = isYes ? '#bbf7d0' : 'transparent';
-    return `<td colspan="2" style="background:${bg};font-weight:700;font-size:12px;">(${count})</td>`;
+    return `<td colspan="2" data-operator-index="${idx}" style="background:${bg};font-weight:700;font-size:12px;">(${count})</td>`;
   }).join('')
     + `<td></td><td style="font-weight:700;font-size:14px;color:#166534;">${total3L}%</td><td></td>`;
   tbody.appendChild(trPoly3);
@@ -260,10 +322,12 @@ function renderMatrix() {
     const count = getOperatorPolyvalence(idx);
     const isYes = count >= 2;
     const bg = isYes ? '#bbf7d0' : 'transparent';
-    return `<td colspan="2" style="background:${bg};font-weight:700;font-size:12px;">(${count})</td>`;
+    return `<td colspan="2" data-operator-index="${idx}" style="background:${bg};font-weight:700;font-size:12px;">(${count})</td>`;
   }).join('')
     + `<td></td><td></td><td style="font-weight:700;font-size:14px;color:#166534;">${total2L}%</td>`;
   tbody.appendChild(trPoly2);
+
+  setupMatrixHoverHighlight();
 
   // Сохраняем для доступа из updateStatsCard
   window._polyData = { percent2L, percent3L, percentOps2L, percentOps3L, total2L, total3L };
@@ -271,6 +335,44 @@ function renderMatrix() {
   // Обновляем статистику в карточках
   updateStatsCard();
   saveState();
+}
+
+function setupMatrixHoverHighlight() {
+  const table = document.getElementById('iluTable');
+  if (!table || table.dataset.hoverBound === 'true') return;
+
+  table.dataset.hoverBound = 'true';
+
+  const clearHighlight = () => {
+    table.querySelectorAll('.matrix-hover-row, .matrix-hover-column')
+      .forEach(element => {
+        element.classList.remove('matrix-hover-row');
+        element.classList.remove('matrix-hover-column');
+      });
+  };
+
+  table.addEventListener('mouseover', event => {
+    const cell = event.target.closest('td, th');
+    if (!cell || !table.contains(cell)) return;
+
+    clearHighlight();
+
+    const row = cell.closest('tr[data-post-index]');
+    if (row) {
+      row.classList.add('matrix-hover-row');
+    }
+
+    const operatorIndex = cell.dataset.operatorIndex;
+    if (operatorIndex === undefined) return;
+
+    table
+      .querySelectorAll(`[data-operator-index="${operatorIndex}"]`)
+      .forEach(element => {
+        element.classList.add('matrix-hover-column');
+      });
+  });
+
+  table.addEventListener('mouseleave', clearHighlight);
 }
 
 // ======================== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ========================
