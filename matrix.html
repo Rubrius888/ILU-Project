@@ -53,11 +53,12 @@
 
   <div class="export-buttons">
     <button
-      class="btn-small"
-      onclick="exportCurrentTableToExcel()"
-    >
-      📊 Экспорт Excel
-    </button>
+  class="btn-small"
+  type="button"
+  onclick="window.exportCurrentTableToExcel()"
+>
+  📊 Скачать Excel
+</button>
   </div>
 
   <!-- КАЛЕНДАРЬ + ДАННЫЕ + ПАНЕЛЬ -->
@@ -186,7 +187,12 @@
 
 </div>
 <script src="storage.js"></script>
+<script src="app-state.js"></script>
+<script src="placement-module.js"></script>
+<script src="training-module.js"></script>
+<script src="plans-module.js"></script>
 <script src="app.js"></script>
 <script src="plans-storage.js"></script>
+<script src="excel-export.js"></script>
 </body>
 </html>
