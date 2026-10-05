@@ -352,6 +352,9 @@ document.addEventListener('click', event => {
 // ======================== ВКЛАДКИ ========================
 
 function openTab(event, id) {
+    // Закрываем открытые всплывающие окна выбора
+  document.querySelectorAll('.inline-select').forEach(el => el.remove());
+  
   document
     .querySelectorAll('.tab')
     .forEach(tab => {

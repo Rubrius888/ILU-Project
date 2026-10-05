@@ -9,7 +9,6 @@
 <body>
 <div class="container">
 
-  <!-- ШАПКА С ФИЛЬТРАМИ -->
   <div class="header-card">
     <img src="logo.png" alt="Логотип" class="logo">
     <img src="emblem.png" alt="Эмблема" class="emblem">
@@ -53,7 +52,6 @@
     </div>
   </div>
 
-  <!-- ВКЛАДКИ -->
   <div class="tabs">
     <button class="tab active" onclick="openTab(event, 'matrix')">
       Матрица ILU
@@ -80,8 +78,7 @@
     </button>
   </div>
 
-  <!-- КАЛЕНДАРЬ + ДАННЫЕ + ПАНЕЛЬ -->
-  <div class="middle-row">
+  <div class="middle-row" id="matrixInfo">
 
     <div class="date-bar" id="dateBar"></div>
 
@@ -220,7 +217,6 @@
       </div>
     </div>
 
-    <!-- КОМПАКТНАЯ ПАНЕЛЬ ДЕЙСТВИЙ СПРАВА -->
     <div class="export-buttons" aria-label="Действия с данными">
       <span class="toolbar-label">Действия</span>
 
@@ -259,16 +255,26 @@
 
   </div>
 
-  <!-- МАТРИЦА -->
   <div id="matrix" class="tab-content active">
 
-    <div id="matrixAddActions" class="add-buttons-top">
-      <button class="btn-small" onclick="addOperator()">
-        + Оператор
-      </button>
+    <div class="section-toolbar">
+      <div id="matrixAddActions" class="add-buttons-top">
+        <button class="btn-small" onclick="addOperator()">
+          + Оператор
+        </button>
 
-      <button class="btn-small" onclick="addPost()">
-        + Пост
+        <button class="btn-small" onclick="addPost()">
+          + Пост
+        </button>
+      </div>
+
+      <button
+        class="btn-small print-button"
+        type="button"
+        onclick="printSections(['matrixInfo', 'matrix'])"
+        title="Печать матрицы и информационных таблиц"
+      >
+        🖨 Печать
       </button>
     </div>
 
@@ -305,10 +311,7 @@
         </span>
 
         <span>
-          <span
-            class="dot"
-            style="background:#fef9c3;color:#ef4444;font-weight:900;"
-          ></span>
+          <span class="dot" style="background:#fef9c3;color:#ef4444;font-weight:900;"></span>
           Iкр — Обучается на I
         </span>
 
@@ -318,10 +321,7 @@
         </span>
 
         <span>
-          <span
-            class="dot"
-            style="background:#fed7aa;color:#ef4444;font-weight:900;"
-          ></span>
+          <span class="dot" style="background:#fed7aa;color:#ef4444;font-weight:900;"></span>
           Lкр — Обучается на L
         </span>
 
@@ -337,32 +337,30 @@
     </div>
   </div>
 
-  <!-- СТАТИСТИКА -->
   <div id="stats" class="tab-content">
     <div class="stats-dashboard">
 
       <div class="stats-dashboard-header">
         <div>
           <h2>Статистика участка</h2>
-
           <p id="statsHistoryStatus">
             История показателей ещё не накоплена.
           </p>
         </div>
 
         <label class="stats-period-control">
-  <span>Период графика</span>
+          <span>Период графика</span>
 
-  <select
-    id="statsPeriodSelect"
-    onchange="renderStatsDashboard()"
-  >
-    <option value="30">Последние 30 дней</option>
-    <option value="90">Последние 90 дней</option>
-    <option value="year">Текущий год</option>
-    <option value="all">Вся доступная история</option>
-  </select>
-</label>
+          <select
+            id="statsPeriodSelect"
+            onchange="renderStatsDashboard()"
+          >
+            <option value="30">Последние 30 дней</option>
+            <option value="90">Последние 90 дней</option>
+            <option value="year">Текущий год</option>
+            <option value="all">Вся доступная история</option>
+          </select>
+        </label>
       </div>
 
       <div class="stats-kpi-grid">
@@ -454,10 +452,7 @@
         </div>
 
         <div class="stats-risk-table-wrap">
-          <table
-            id="statsRiskTable"
-            class="stats-risk-table"
-          >
+          <table id="statsRiskTable" class="stats-risk-table">
             <thead>
               <tr>
                 <th>Пост</th>
@@ -466,7 +461,6 @@
                 <th>Обучение</th>
               </tr>
             </thead>
-
             <tbody></tbody>
           </table>
         </div>
@@ -474,95 +468,95 @@
 
       <div class="stats-rating-grid">
 
-  <section class="stats-panel stats-rating-panel">
-    <div class="stats-panel-heading">
-      <h3>Рейтинг квалификационного покрытия операторов</h3>
+        <section class="stats-panel stats-rating-panel">
+          <div class="stats-panel-heading">
+            <h3>Рейтинг квалификационного покрытия операторов</h3>
+            <span>I = 1 · L = 2 · U = 3 · НУ не учитывается</span>
+          </div>
 
-      <span>
-        I = 1 · L = 2 · U = 3 · НУ не учитывается
-      </span>
-    </div>
+          <div
+            id="statsRatingChart"
+            class="stats-rating-chart"
+            aria-live="polite"
+          ></div>
+        </section>
 
-    <div
-      id="statsRatingChart"
-      class="stats-rating-chart"
-      aria-live="polite"
-    ></div>
-  </section>
+        <section class="stats-panel stats-rating-panel">
+          <div class="stats-panel-heading">
+            <h3>Рейтинг квалификационного покрытия постов</h3>
+            <span>сумма I, L и U по каждому посту</span>
+          </div>
 
-  <section class="stats-panel stats-rating-panel">
-    <div class="stats-panel-heading">
-      <h3>Рейтинг квалификационного покрытия постов</h3>
+          <div
+            id="statsPostCoverageChart"
+            class="stats-rating-chart"
+            aria-live="polite"
+          ></div>
+        </section>
 
-      <span>
-        сумма I, L и U по каждому посту
-      </span>
-    </div>
+      </div>
 
-    <div
-      id="statsPostCoverageChart"
-      class="stats-rating-chart"
-      aria-live="polite"
-    ></div>
-  </section>
+      <div class="stats-attendance-grid">
 
-</div>
+        <section class="stats-panel stats-attendance-rating-panel">
+          <div class="stats-panel-heading">
+            <h3>Рейтинг посещаемости операторов</h3>
+            <span>явка за выбранный период · НУ не учитывается</span>
+          </div>
 
-<div class="stats-attendance-grid">
+          <div
+            id="statsAttendanceRatingChart"
+            class="stats-rating-chart"
+            aria-live="polite"
+          ></div>
+        </section>
 
-  <section class="stats-panel stats-attendance-rating-panel">
-    <div class="stats-panel-heading">
-      <h3>Рейтинг посещаемости операторов</h3>
+        <section class="stats-panel stats-attendance-panel">
+          <div class="stats-panel-heading">
+            <h3>История посещаемости</h3>
+            <span>по выбранному периоду</span>
+          </div>
 
-      <span>
-        явка за выбранный период · НУ не учитывается
-      </span>
-    </div>
+          <div class="stats-risk-table-wrap">
+            <table
+              id="statsAttendanceTable"
+              class="stats-risk-table stats-attendance-table"
+            >
+              <thead>
+                <tr>
+                  <th>Дата</th>
+                  <th>Присутствуют</th>
+                  <th>Отсутствуют</th>
+                  <th>Операторов</th>
+                  <th>Явка</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
 
-    <div
-      id="statsAttendanceRatingChart"
-      class="stats-rating-chart"
-      aria-live="polite"
-    ></div>
-  </section>
-
-  <section class="stats-panel stats-attendance-panel">
-    <div class="stats-panel-heading">
-      <h3>История посещаемости</h3>
-
-      <span>по выбранному периоду</span>
-    </div>
-
-    <div class="stats-risk-table-wrap">
-      <table
-        id="statsAttendanceTable"
-        class="stats-risk-table stats-attendance-table"
-      >
-        <thead>
-          <tr>
-            <th>Дата</th>
-            <th>Присутствуют</th>
-            <th>Отсутствуют</th>
-            <th>Операторов</th>
-            <th>Явка</th>
-          </tr>
-        </thead>
-
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
-
-</div>
+      </div>
 
     </div>
   </div>
 
   <!-- ОБУЧЕНИЯ -->
   <div id="training" class="tab-content">
-    <div class="add-buttons-top">
-      <button class="btn-small" onclick="addTrainingRecord()">
-        + Добавить запись
+    <div class="section-toolbar">
+      <div class="add-buttons-top">
+        <button class="btn-small" onclick="addTrainingRecord()">
+          + Добавить запись
+        </button>
+      </div>
+
+      <button
+        class="btn-small print-button"
+        type="button"
+        onclick="printSections(['training'])"
+        title="Печать журнала обучения"
+      >
+        🖨 Печать
       </button>
     </div>
 
@@ -603,40 +597,45 @@
 
   <!-- РОТАЦИЯ -->
   <div id="rotation" class="tab-content">
-    <div class="add-buttons-top" style="gap:8px;">
-      <span style="font-size:13px;color:#475569;">
-        Ротаций в день:
-      </span>
+    <div class="section-toolbar">
+      <div class="add-buttons-top" style="gap:8px;">
+        <span style="font-size:13px;color:#475569;">
+          Ротаций в день:
+        </span>
 
-      <input
-        type="number"
-        id="rotationsPerDay"
-        value="1"
-        min="1"
-        max="5"
-        style="width:50px;padding:3px 6px;border:1px solid #cbd5e1;border-radius:4px;text-align:center;"
-      >
+        <input
+          type="number"
+          id="rotationsPerDay"
+          value="1"
+          min="1"
+          max="5"
+          style="width:50px;padding:3px 6px;border:1px solid #cbd5e1;border-radius:4px;text-align:center;"
+        >
+
+        <button
+          class="btn-small"
+          onclick="generateRotationPlan()"
+        >
+          Сгенерировать ротацию
+        </button>
+      </div>
 
       <button
-        class="btn-small"
-        onclick="generateRotationPlan()"
+        class="btn-small print-button"
+        type="button"
+        onclick="printSections(['rotation'])"
+        title="Печать плана ротации"
       >
-        Сгенерировать ротацию
+        🖨 Печать
       </button>
     </div>
 
-    <div
-      class="matrix-container"
-      style="overflow-x:auto;"
-    >
+    <div class="matrix-container" style="overflow-x:auto;">
       <table id="rotCalendarTable">
         <thead></thead>
-
         <tbody>
           <tr>
-            <td
-              style="text-align:center;color:#94a3b8;padding:40px;"
-            >
+            <td style="text-align:center;color:#94a3b8;padding:40px;">
               Нажмите «Сгенерировать ротацию»
             </td>
           </tr>
@@ -647,27 +646,32 @@
 
   <!-- ПЛАНИНГ РАЗВИТИЯ -->
   <div id="planning" class="tab-content">
-    <div class="add-buttons-top">
+    <div class="section-toolbar">
+      <div class="add-buttons-top">
+        <button
+          class="btn-small"
+          onclick="generateDevelopmentPlan()"
+        >
+          Сгенерировать план
+        </button>
+      </div>
+
       <button
-        class="btn-small"
-        onclick="generateDevelopmentPlan()"
+        class="btn-small print-button"
+        type="button"
+        onclick="printSections(['planning'])"
+        title="Печать плана развития"
       >
-        Сгенерировать план
+        🖨 Печать
       </button>
     </div>
 
-    <div
-      class="matrix-container"
-      style="overflow-x:auto;"
-    >
+    <div class="matrix-container" style="overflow-x:auto;">
       <table id="devCalendarTable">
         <thead></thead>
-
         <tbody>
           <tr>
-            <td
-              style="text-align:center;color:#94a3b8;padding:40px;"
-            >
+            <td style="text-align:center;color:#94a3b8;padding:40px;">
               Нажмите «Сгенерировать план»
             </td>
           </tr>
@@ -678,10 +682,7 @@
 
   <!-- ЖУРНАЛ РАССТАНОВКИ -->
   <div id="placementLog" class="tab-content">
-    <div
-      class="matrix-container"
-      style="overflow-x:auto;"
-    >
+    <div class="matrix-container" style="overflow-x:auto;">
       <table id="placementLogTable">
         <thead>
           <tr>

@@ -82,7 +82,7 @@ let data = [
   // Пост 10
   [
     null, null, 'L', null, 'U', 'L', null, null, null,
-    null, 'L', null, null, null, null, null, null, null
+    null, 'L', null, null, null, null, null, null, null, null
   ],
 
   // Пост 25
@@ -160,6 +160,25 @@ let data = [
 
 // Журнал обучений
 let trainingRecords = [];
+
+// Фильтры журнала обучений
+let trainingFilters = {
+  year: [],
+  month: [],
+  startWeek: [],
+  endWeek: [],
+  post: [],
+  op: [],
+  level: [],
+  status: [],
+  formator: [],
+  startDateFrom: '',
+  startDateTo: '',
+  validDateFrom: '',
+  validDateTo: ''
+};
+
+let trainingFilterMenu = null;
 
 // Журнал расстановки
 let placementLog = [];

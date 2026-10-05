@@ -66,8 +66,27 @@ function updateStatsCard() {
   for (let r = 0; r < posts.length; r++) {
     let hasOperator = false, hasTraining = false;
     for (let c = 0; c < operators.length; c++) {
-      if (attendanceData[r][c] === '○') hasOperator = true;
-      if (attendanceData[r][c] === '△') { hasOperator = true; hasTraining = true; }
+      const status = attendanceData[r][c];
+      const isExternalOperator = operatorRoles[c] === 'ДС';
+
+      // ДС закрывает пост физически, но не участвует
+      // в показателях обучения участка.
+      if (status === '○' || status === '△') {
+        hasOperator = true;
+      }
+
+      if (!isExternalOperator && status === '△') {
+        hasOperator = true;
+        hasTraining = true;
+      }
+
+      if (
+        !isExternalOperator &&
+        status === '○' &&
+        (data[r]?.[c] === 'Iкр' || data[r]?.[c] === 'Lкр')
+      ) {
+        hasTraining = true;
+      }
     }
     if (hasOperator) filledPosts++;
     if (hasTraining) trainingPosts++;
@@ -119,6 +138,33 @@ if (emptyPostsRow) {
   document.getElementById('statsOps2L').textContent = (pd.percentOps2L || 0) + '%';
   document.getElementById('statsOps3L').textContent = (pd.percentOps3L || 0) + '%';
 }
+
+// ======================== ПЕЧАТЬ РАЗДЕЛОВ ========================
+// Печать выполняется средствами браузера: Excel/PDF и сторонние библиотеки
+// для этого режима не используются. Можно передать один или несколько блоков.
+function printSections(sectionIds) {
+  const ids = Array.isArray(sectionIds) ? sectionIds : [sectionIds];
+  const targets = ids
+    .map(id => document.getElementById(id))
+    .filter(Boolean);
+
+  if (!targets.length) return;
+
+  const cleanup = () => {
+    document.body.classList.remove('is-printing');
+    targets.forEach(section => section.classList.remove('print-target'));
+    window.removeEventListener('afterprint', cleanup);
+  };
+
+  document.body.classList.add('is-printing');
+  targets.forEach(section => section.classList.add('print-target'));
+  window.addEventListener('afterprint', cleanup);
+
+  // Даём браузеру применить print-стили до открытия диалога печати.
+  requestAnimationFrame(() => window.print());
+}
+
+window.printSections = printSections;
 
 // ======================== ПЕРВИЧНЫЙ ЗАПУСК ========================
 restoreSavedFilters();

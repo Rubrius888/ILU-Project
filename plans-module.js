@@ -467,18 +467,50 @@ function placeCalendarOp(opName, postIndex, startDay) {
   if (lvl === 'Iкр' || lvl === null || lvl === '') {
     days = trainingDays[postIndex];
   }
-  // ... остальное без изменений
 
   const allTd = row.querySelectorAll('td');
   const year = new Date().getFullYear();
   const month = new Date().getMonth();
   const daysInMonth = window.daysInMonth || 31;
-  let placed = 0;
 
-  for (let d = startDay; d < daysInMonth && placed < days; d++) {
+  // Сначала строим точный список рабочих дней, которые будут заняты.
+  // Это позволяет проверить пересечения до изменения таблицы.
+  const plannedDays = [];
+
+  for (let d = startDay; d < daysInMonth && plannedDays.length < days; d++) {
     const dayOfWeek = new Date(year, month, d + 1).getDay();
     if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+
     const td = allTd[d + 1];
+    if (td && td.textContent === '+') {
+      plannedDays.push(d);
+    }
+  }
+
+  const conflictingCell = Array.from(
+    tbody.querySelectorAll('td[data-op]')
+  ).find(cell => {
+    if (cell.getAttribute('data-op') !== opName) {
+      return false;
+    }
+
+    const existingDay = Number(cell.getAttribute('data-day'));
+    return plannedDays.includes(existingDay);
+  });
+
+  if (conflictingCell) {
+    alert(
+      `${opName} уже обучается на другом посту ` +
+      'в выбранный период. Выберите другую дату.'
+    );
+    return;
+  }
+
+  let placed = 0;
+
+  for (const d of plannedDays) {
+    const td = allTd[d + 1];
+
     if (td && td.textContent === '+') {
       td.textContent = opName;
       td.style.color = '#2563eb';
@@ -745,6 +777,30 @@ function generateRotationPlan() {
 }
 
 // ======================== РЕДАКТИРОВАНИЕ РОТАЦИИ ========================
+function positionRotationContextMenu(menu, event) {
+  const margin = 8;
+
+  menu.style.position = 'fixed';
+  menu.style.left = '0px';
+  menu.style.top = '0px';
+
+  const rect = menu.getBoundingClientRect();
+
+  let left = event.clientX;
+  let top = event.clientY;
+
+  if (left + rect.width > window.innerWidth - margin) {
+    left = window.innerWidth - rect.width - margin;
+  }
+
+  if (top + rect.height > window.innerHeight - margin) {
+    top = event.clientY - rect.height;
+  }
+
+  menu.style.left = `${Math.max(margin, left)}px`;
+  menu.style.top = `${Math.max(margin, top)}px`;
+}
+
 function editRotationCell(event) {
   event.stopPropagation();
   hideMenu();
@@ -756,9 +812,8 @@ function editRotationCell(event) {
   const menu = document.createElement('div');
   menu.className = 'context-menu';
   menu.innerHTML = `<div class="danger" onclick="deleteRotationOp('${opName}', ${td.getAttribute('data-post')}); hideMenu();">🗑️ Убрать оператора</div>`;
-  menu.style.left = event.clientX + 'px';
-  menu.style.top = event.clientY + 'px';
   document.body.appendChild(menu);
+  positionRotationContextMenu(menu, event);
   currentMenu = menu;
   setTimeout(() => document.addEventListener('click', hideMenu, { once: true }), 0);
 }
@@ -818,9 +873,8 @@ function addRotationOp(event) {
     html += `<div onclick="placeRotationOp('${op}', ${postIndex}, ${dayIndex}); hideMenu();">${op}</div>`;
   });
   menu.innerHTML = html;
-  menu.style.left = event.clientX + 'px';
-  menu.style.top = event.clientY + 'px';
   document.body.appendChild(menu);
+  positionRotationContextMenu(menu, event);
   currentMenu = menu;
   setTimeout(() => document.addEventListener('click', hideMenu, { once: true }), 0);
 }

@@ -266,6 +266,34 @@ body {
   margin-bottom: 8px;
 }
 
+.section-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.section-toolbar .add-buttons-top {
+  margin-bottom: 0;
+}
+
+.print-button {
+  flex: 0 0 auto;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+#trainingTable th[data-training-sort] {
+  cursor: pointer;
+  user-select: none;
+}
+
+#trainingTable th[data-training-sort]:hover {
+  background: #e2e8f0;
+}
+
 .btn-small {
   padding: 4px 12px;
   border-radius: 6px;
@@ -331,7 +359,12 @@ body {
 }
 
 #matrix .matrix-container {
-  max-height: calc(100vh - 360px);
+  /* Матрица растёт по содержимому и прокручивается вместе со страницей.
+     Горизонтальная прокрутка остаётся внутри контейнера только при
+     недостаточной ширине экрана. */
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 table {
@@ -353,8 +386,6 @@ th {
   background: #f8fafc;
   font-weight: 600;
   color: #475569;
-  position: sticky;
-  top: 0;
 }
 
 #iluTable th:first-child,
@@ -369,59 +400,22 @@ td:first-child {
   font-weight: 500;
 }
 
-/* Закреплённые заголовки и первые колонки */
-#iluTable thead tr:nth-child(1) th {
-  top: 0;
-}
-
-#iluTable thead tr:nth-child(2) th {
-  top: 32px;
-}
-
-#iluTable thead tr:nth-child(3) th {
-  top: 72px;
-}
-
-#iluTable th:nth-child(1),
-#iluTable td:nth-child(1) {
-  position: sticky;
-  left: 0;
-  z-index: 8;
-  background: #f8fafc;
-}
-
 #iluTable th:nth-child(2),
 #iluTable td:nth-child(2) {
-  position: sticky;
-  left: 280px;
-  z-index: 8;
-  background: #f8fafc;
   min-width: 42px;
   width: 42px;
 }
 
 #iluTable th:nth-child(3),
 #iluTable td:nth-child(3) {
-  position: sticky;
-  left: 322px;
-  z-index: 8;
-  background: #f8fafc;
   min-width: 46px;
   width: 46px;
 }
 
 #iluTable th:nth-child(4),
 #iluTable td:nth-child(4) {
-  position: sticky;
-  left: 368px;
-  z-index: 8;
-  background: #f8fafc;
   min-width: 110px;
   width: 110px;
-}
-
-#iluTable thead th:nth-child(-n+4) {
-  z-index: 20;
 }
 
 #iluTable tbody td:nth-child(-n+4) {
@@ -1097,7 +1091,7 @@ th span {
 /* Сигналы состояния постов в матрице */
 #iluTable tbody tr.matrix-row-alert-red > td,
 #iluTable tbody tr.matrix-row-alert-yellow > td {
-  animation-duration: 1.6s;
+  animation-duration: 3s;
   animation-timing-function: ease-in-out;
   animation-iteration-count: infinite;
 }
@@ -1113,21 +1107,524 @@ th span {
 @keyframes matrix-row-alert-red {
   0%,
   100% {
-    box-shadow: inset 0 0 0 999px rgba(239, 68, 68, 0.18);
+    box-shadow: inset 0 0 0 999px rgba(255, 0, 0, 0.55);
   }
 
   50% {
-    box-shadow: inset 0 0 0 999px rgba(239, 68, 68, 0);
+    box-shadow: inset 0 0 0 999px rgba(255, 0, 0, 0.08);
   }
 }
 
 @keyframes matrix-row-alert-yellow {
   0%,
   100% {
-    box-shadow: inset 0 0 0 999px rgba(234, 179, 8, 0.18);
+    box-shadow: inset 0 0 0 999px rgba(255, 215, 0, 0.65);
   }
 
   50% {
-    box-shadow: inset 0 0 0 999px rgba(234, 179, 8, 0);
+    box-shadow: inset 0 0 0 999px rgba(255, 215, 0, 0.08);
+  }
+}
+
+/* Адаптивная раскладка для ноутбуков и узких экранов */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.container {
+  width: 100%;
+  max-width: 100%;
+}
+
+.matrix-container {
+  width: 100%;
+  max-width: 100%;
+  position: relative;
+  overflow-x: auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+#iluTable,
+#devCalendarTable,
+#rotCalendarTable {
+  width: max-content;
+  min-width: 100%;
+}
+
+#iluTable thead tr:nth-child(1) th {
+  height: 32px;
+  white-space: nowrap;
+}
+
+#iluTable thead tr:nth-child(2) th {
+  height: 40px;
+}
+
+#iluTable thead tr:nth-child(3) th {
+  height: 56px;
+}
+
+#iluTable thead th:nth-child(n + 5),
+#iluTable tbody td:nth-child(n + 5) {
+  white-space: nowrap;
+}
+
+#devCalendarTable,
+#rotCalendarTable {
+  table-layout: fixed;
+}
+
+#devCalendarTable th:first-child,
+#devCalendarTable td:first-child,
+#rotCalendarTable th:first-child,
+#rotCalendarTable td:first-child {
+  width: 280px;
+  min-width: 280px;
+  white-space: normal;
+  text-align: left;
+}
+
+#devCalendarTable th:not(:first-child),
+#devCalendarTable td:not(:first-child),
+#rotCalendarTable th:not(:first-child),
+#rotCalendarTable td:not(:first-child) {
+  width: 58px;
+  min-width: 58px;
+  white-space: nowrap;
+}
+
+/*
+ * Поддерживаемый диапазон интерфейса: desktop/laptop, начиная с
+ * viewport 1366x768. Контрольные ширины: 1366, 1536, 1920 и 2560 px.
+ * На меньших ширинах ниже остаётся только безопасный fallback; мобильная
+ * раскладка не является целевым режимом приложения.
+ */
+@media (max-width: 1400px) {
+  .middle-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .date-bar,
+  .info-card,
+  .stats-card {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .export-buttons {
+    position: static;
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .toolbar-label {
+    margin-right: 4px;
+  }
+
+  .export-buttons .btn-small {
+    width: auto;
+  }
+}
+
+@media (max-width: 900px) {
+  .container {
+    padding: 8px;
+  }
+
+  .header-card {
+    padding: 14px;
+    justify-content: stretch;
+  }
+
+  .logo,
+  .emblem {
+    display: none;
+  }
+
+  .filter-group {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 0;
+  }
+
+  .filter-group select,
+  .filter-group input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .tabs {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .tab {
+    flex: 1 1 auto;
+    padding: 9px 10px;
+    font-size: 12px;
+  }
+
+  .stats-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .middle-row {
+    grid-template-columns: 1fr;
+  }
+
+  .export-buttons {
+    justify-content: flex-start;
+  }
+
+  .filter-group {
+    flex-basis: 100%;
+  }
+
+  .stats-kpi-grid,
+  .stats-dashboard-grid,
+  .stats-rating-grid,
+  .stats-attendance-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-panel-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+/* Печать выполняется средствами браузера в альбомной ориентации. */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 5mm;
+  }
+
+  html,
+  body {
+    min-width: 0 !important;
+    width: auto !important;
+    max-width: none !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  body.is-printing * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body.is-printing .header-card,
+  body.is-printing .tabs,
+  body.is-printing .tab-content:not(.print-target),
+  body.is-printing .middle-row:not(.print-target) {
+    display: none !important;
+  }
+
+  body.is-printing .container {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body.is-printing .tab-content.print-target,
+  body.is-printing .middle-row.print-target {
+    display: block !important;
+    visibility: visible !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+
+  body.is-printing #matrixInfo.print-target {
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    align-items: stretch !important;
+    gap: 5px !important;
+    position: static !important;
+    margin-bottom: 9px !important;
+  }
+
+  body.is-printing #matrixInfo.print-target > .date-bar,
+  body.is-printing #matrixInfo.print-target > .info-card,
+  body.is-printing #matrixInfo.print-target > .stats-card {
+    grid-column: auto !important;
+    min-width: 0 !important;
+    width: auto !important;
+    padding: 9px 12px !important;
+    gap: 5px !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 5px !important;
+    font-size: 13.5px !important;
+    box-shadow: none !important;
+  }
+
+  body.is-printing #matrixInfo .info-label {
+    min-width: 0 !important;
+    font-size: 12px !important;
+    line-height: 1.25 !important;
+  }
+
+  body.is-printing #matrixInfo .info-value {
+    font-size: 13.5px !important;
+    line-height: 1.25 !important;
+  }
+
+  body.is-printing #matrixInfo .date-bar {
+    white-space: normal !important;
+    line-height: 1.2 !important;
+  }
+
+  body.is-printing .section-toolbar,
+  body.is-printing .add-buttons-top,
+  body.is-printing .print-button,
+  body.is-printing .export-buttons,
+  body.is-printing #emptyMatrixState {
+    display: none !important;
+  }
+
+  body.is-printing .matrix-container {
+    width: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  body.is-printing #matrixTableContainer {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    width: max-content !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+  }
+
+  body.is-printing #matrixTableContainer #iluTable th:first-child,
+  body.is-printing #matrixTableContainer #iluTable td:first-child {
+    min-width: 180px !important;
+    width: 180px !important;
+  }
+
+  body.is-printing #matrixTableContainer #iluTable th:nth-child(2),
+  body.is-printing #matrixTableContainer #iluTable td:nth-child(2) {
+    min-width: 30px !important;
+    width: 30px !important;
+  }
+
+  body.is-printing #matrixTableContainer #iluTable th:nth-child(3),
+  body.is-printing #matrixTableContainer #iluTable td:nth-child(3) {
+    min-width: 34px !important;
+    width: 34px !important;
+  }
+
+  body.is-printing #matrixTableContainer #iluTable th:nth-child(4),
+  body.is-printing #matrixTableContainer #iluTable td:nth-child(4) {
+    min-width: 75px !important;
+    width: 75px !important;
+  }
+
+  body.is-printing #matrixTableContainer #iluTable th:nth-child(n + 5),
+  body.is-printing #matrixTableContainer #iluTable td:nth-child(n + 5) {
+    min-width: 28px !important;
+    width: 28px !important;
+  }
+
+  body.is-printing table {
+    width: max-content !important;
+    min-width: 0 !important;
+  }
+
+  /* Планинги должны помещать весь календарь на печатный лист. */
+  body.is-printing #rotation .matrix-container,
+  body.is-printing #planning .matrix-container {
+    width: 100% !important;
+    max-width: none !important;
+    flex: 1 1 auto !important;
+    display: flex !important;
+    align-items: stretch !important;
+    margin: 0 auto !important;
+    overflow: visible !important;
+  }
+
+  body.is-printing #rotation.print-target,
+  body.is-printing #planning.print-target {
+    display: flex !important;
+    flex-direction: column !important;
+    height: calc(100vh - 10mm) !important;
+    min-height: 0 !important;
+  }
+
+  body.is-printing #rotCalendarTable,
+  body.is-printing #devCalendarTable {
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+    margin: 0 auto !important;
+  }
+
+  body.is-printing #rotCalendarTable th,
+  body.is-printing #rotCalendarTable td,
+  body.is-printing #devCalendarTable th,
+  body.is-printing #devCalendarTable td {
+    padding: 2px 1px !important;
+    font-size: 7px !important;
+    line-height: 1.05 !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+  }
+
+  body.is-printing #rotCalendarTable th:first-child,
+  body.is-printing #rotCalendarTable td:first-child,
+  body.is-printing #devCalendarTable th:first-child,
+  body.is-printing #devCalendarTable td:first-child {
+    width: 180px !important;
+    min-width: 180px !important;
+  }
+
+  body.is-printing #rotCalendarTable th:not(:first-child),
+  body.is-printing #rotCalendarTable td:not(:first-child),
+  body.is-printing #devCalendarTable th:not(:first-child),
+  body.is-printing #devCalendarTable td:not(:first-child) {
+    width: 26px !important;
+    min-width: 0 !important;
+  }
+
+  body.is-printing .legend {
+    page-break-inside: avoid;
+  }
+}
+
+/* На ноутбуках и при увеличенном масштабе браузера
+   панель действий не должна накладываться на карточки. */
+@media (max-width: 1800px) {
+  .middle-row {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .middle-row > .date-bar,
+  .middle-row > .info-card,
+  .middle-row > .stats-card {
+    width: 100%;
+    min-width: 0 !important;
+  }
+
+  .middle-row > .export-buttons {
+    position: static !important;
+    inset: auto;
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0 !important;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .middle-row > .export-buttons .btn-small {
+    width: auto;
+  }
+}
+
+@media (max-width: 620px) {
+  .middle-row {
+    grid-template-columns: 1fr;
+  }
+
+  .middle-row > .export-buttons {
+    justify-content: flex-start;
+  }
+}
+
+/* Финальная печатная настройка матрицы: без принудительного переноса
+   целиком на новую страницу и с полным вписыванием по ширине листа. */
+@media print {
+  body.is-printing #matrixTableContainer {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+
+  body.is-printing #matrixTableContainer #iluTable {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    table-layout: auto !important;
+    margin: 0 !important;
+  }
+
+  body.is-printing #matrixTableContainer #iluTable th,
+  body.is-printing #matrixTableContainer #iluTable td {
+    padding: 2px 3px !important;
+    font-size: 8px !important;
+    line-height: 1.05 !important;
+    vertical-align: middle !important;
+    text-align: center !important;
+  }
+
+  body.is-printing #matrixTableContainer #iluTable td:first-child {
+    text-align: left !important;
+  }
+
+  /* Уменьшаем только сводные колонки матрицы, не операторские. */
+  body.is-printing #matrixTableContainer #iluTable .matrix-summary-column {
+    width: 30px !important;
+    min-width: 30px !important;
+    max-width: 30px !important;
+    padding-left: 1px !important;
+    padding-right: 1px !important;
+  }
+
+  body.is-printing #matrixTableContainer #iluTable thead tr:nth-child(2) th:nth-child(n + 5) {
+    height: 44px !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+    line-height: 1.1 !important;
+  }
+
+  body.is-printing #matrixTableContainer #iluTable .status-marker {
+    display: block !important;
+    margin: 0 auto !important;
+  }
+
+  body.is-printing #training .matrix-container {
+    width: 100% !important;
+    max-width: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  body.is-printing #trainingTable {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: auto !important;
+    margin: 0 !important;
+  }
+
+  body.is-printing #trainingTable th,
+  body.is-printing #trainingTable td {
+    padding: 3px 4px !important;
+    font-size: 8px !important;
+    line-height: 1.1 !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
   }
 }

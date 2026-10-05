@@ -29,7 +29,8 @@ function cyclePostStatus(row, col) {
     }
 
     if (option.value === '△') {
-      return currentLevel === 'Iкр';
+      return currentLevel === 'Iкр' &&
+        operatorRoles[col] !== 'ДС';
     }
 
     return true;
@@ -126,7 +127,10 @@ function cyclePostStatus(row, col) {
 
         // При автоматическом переходе I -> Lкр
         // сразу создаём соответствующую запись в журнале обучения.
-        if (typeof createAutomaticLcrTrainingRecord === 'function') {
+        if (
+          operatorRoles[col] !== 'ДС' &&
+          typeof createAutomaticLcrTrainingRecord === 'function'
+        ) {
           createAutomaticLcrTrainingRecord(row, col);
         }
       }

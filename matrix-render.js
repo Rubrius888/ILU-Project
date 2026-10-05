@@ -125,15 +125,15 @@ function renderMatrix() {
       >${operator}</th>
     `).join('') +
 
-    '<th rowspan="2" style="vertical-align:middle;">' +
+    '<th rowspan="2" class="matrix-summary-column matrix-cover-column" style="vertical-align:middle;">' +
       '<span style="writing-mode:sideways-lr;">Покрытие U</span>' +
     '</th>' +
 
-    '<th rowspan="2" style="vertical-align:middle;">' +
+    '<th rowspan="2" class="matrix-summary-column matrix-poly3-column" style="vertical-align:middle;">' +
       '<span style="writing-mode:sideways-lr;">Поливал. 3L</span>' +
     '</th>' +
 
-    '<th rowspan="2" style="vertical-align:middle;">' +
+    '<th rowspan="2" class="matrix-summary-column matrix-poly2-column" style="vertical-align:middle;">' +
       '<span style="writing-mode:sideways-lr;">Поливал. 2L</span>' +
     '</th>';
 
@@ -362,6 +362,10 @@ function renderMatrix() {
     // ----- ПОКРЫТИЕ U -----
 
     const tdCover = document.createElement('td');
+    tdCover.classList.add(
+      'matrix-summary-column',
+      'matrix-cover-column'
+    );
     let uCount = 0;
 
     for (let c = 0; c < operators.length; c++) {
@@ -390,6 +394,10 @@ function renderMatrix() {
     // ----- ПОЛИВАЛЕНТНОСТЬ 3L -----
 
     const tdPoly3 = document.createElement('td');
+    tdPoly3.classList.add(
+      'matrix-summary-column',
+      'matrix-poly3-column'
+    );
     let countL3 = 0;
 
     for (let c = 0; c < operators.length; c++) {
@@ -426,6 +434,10 @@ function renderMatrix() {
     // ----- ПОЛИВАЛЕНТНОСТЬ 2L -----
 
     const tdPoly2 = document.createElement('td');
+    tdPoly2.classList.add(
+      'matrix-summary-column',
+      'matrix-poly2-column'
+    );
 
     tdPoly2.textContent =
       countL3 >= 2
@@ -582,7 +594,7 @@ function renderMatrix() {
       }
 
       const label = isExternalOperator
-        ? 'Из другого сектора'
+        ? 'ДС'
         : attendance === 'Я'
           ? 'Явка'
           : attendance === 'Н'

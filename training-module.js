@@ -121,6 +121,10 @@ function openTrainingRecordForm(options = {}) {
   const operatorSelect = document.createElement('select');
 
   operators.forEach((operator, index) => {
+    if (operatorRoles[index] === 'ДС') {
+      return;
+    }
+
     operatorSelect.appendChild(
       createTrainingOption(index, operator)
     );
@@ -593,6 +597,10 @@ function openAutomaticTrainingForm(row, col) {
  * расчётной датой окончания обучения, как и в форме добавления записи.
  */
 function createAutomaticLcrTrainingRecord(row, col) {
+  if (operatorRoles[col] === 'ДС') {
+    return;
+  }
+
   const post = posts[row];
   const operator = operators[col];
 
@@ -732,38 +740,629 @@ function updateTrainingStatus(index, status) {
   }
 }
 
-function renderTrainingTable() {
-  const tbody = document.querySelector('#trainingTable tbody');
-  if (!tbody) return;
-
-  saveState();
-
-  if (trainingRecords.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:#94a3b8;padding:40px;">Нет записей. Нажмите «+ Добавить запись»</td></tr>';
+function closeTrainingFilterMenu(event) {
+  if (
+    event &&
+    trainingFilterMenu &&
+    trainingFilterMenu.contains(event.target)
+  ) {
     return;
   }
 
-  tbody.innerHTML = trainingRecords.map((r, i) => `
-    <tr>
-      <td>${r.year}</td>
-      <td>${r.month}</td>
-      <td>${r.startWeek}</td>
-      <td>${r.endWeek}</td>
-      <td>${r.post}</td>
-      <td>${r.op}</td>
-      <td>${r.level}</td>
-      <td
-        style="cursor:pointer;color:#2563eb;"
-       onclick="editTrainingField(${i}, 'status')"
-      >${r.status}</td>
-      <td>${r.formator}</td>
-      <td>${r.startDate}</td>
-      <td style="cursor:pointer;color:#2563eb;" onclick="editTrainingField(${i}, 'validDate')">${r.validDate}</td>
-      <td>${r.duration}</td>
-      <td style="cursor:pointer;color:#2563eb;" onclick="editTrainingField(${i}, 'comment')">${r.comment}</td>
-      <td><span style="cursor:pointer;color:#ef4444;" onclick="deleteTrainingRecord(${i})">✕</span></td>
-    </tr>
-  `).join('');
+  if (trainingFilterMenu) {
+    trainingFilterMenu.remove();
+    trainingFilterMenu = null;
+  }
+}
+
+function trainingDateToIso(value) {
+  if (!value || value === '—') {
+    return '';
+  }
+
+  const parts = String(value).split('.');
+
+  if (parts.length !== 3) {
+    return '';
+  }
+
+  return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+}
+
+function getFilteredTrainingRecords() {
+  return trainingRecords
+    .map((record, index) => ({
+      record,
+      originalIndex: index
+    }))
+    .filter(item => {
+      const r = item.record;
+
+      const simpleFilters = [
+        ['year', r.year],
+        ['month', r.month],
+        ['startWeek', r.startWeek],
+        ['endWeek', r.endWeek],
+        ['post', r.post],
+        ['op', r.op],
+        ['level', r.level],
+        ['status', r.status],
+        ['formator', r.formator]
+      ];
+
+      for (const [key, value] of simpleFilters) {
+        if (
+          trainingFilters[key].length > 0 &&
+          !trainingFilters[key].includes(String(value ?? ''))
+        ) {
+          return false;
+        }
+      }
+
+      const startDate = trainingDateToIso(r.startDate);
+
+      if (
+        trainingFilters.startDateFrom &&
+        (
+          !startDate ||
+          startDate < trainingFilters.startDateFrom
+        )
+      ) {
+        return false;
+      }
+
+      if (
+        trainingFilters.startDateTo &&
+        (
+          !startDate ||
+          startDate > trainingFilters.startDateTo
+        )
+      ) {
+        return false;
+      }
+
+      const validDate = trainingDateToIso(r.validDate);
+
+      if (
+        trainingFilters.validDateFrom &&
+        (
+          !validDate ||
+          validDate < trainingFilters.validDateFrom
+        )
+      ) {
+        return false;
+      }
+
+      if (
+        trainingFilters.validDateTo &&
+        (
+          !validDate ||
+          validDate > trainingFilters.validDateTo
+        )
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+}
+
+function createTrainingFilterButtons(
+  applyHandler,
+  resetHandler
+) {
+  const container = document.createElement('div');
+
+  container.style.cssText = `
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+  `;
+
+  const applyButton = document.createElement('button');
+  applyButton.type = 'button';
+  applyButton.textContent = 'Применить';
+  applyButton.onclick = applyHandler;
+
+  const resetButton = document.createElement('button');
+  resetButton.type = 'button';
+  resetButton.textContent = 'Сбросить';
+  resetButton.onclick = resetHandler;
+
+  [applyButton, resetButton].forEach(button => {
+    button.style.cssText = `
+      padding: 6px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 5px;
+      cursor: pointer;
+      background: #f8fafc;
+    `;
+  });
+
+  container.appendChild(applyButton);
+  container.appendChild(resetButton);
+
+  return container;
+}
+
+function openTrainingFilterMenu(event, type) {
+  event.stopPropagation();
+  closeTrainingFilterMenu();
+
+  const menu = document.createElement('div');
+
+  trainingFilterMenu = menu;
+
+  menu.addEventListener('click', event => {
+    event.stopPropagation();
+  });
+
+  menu.className = 'placement-filter-menu';
+
+  menu.style.cssText = `
+    position: fixed;
+    z-index: 10001;
+    min-width: 260px;
+    max-height: 420px;
+    overflow-y: auto;
+    padding: 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 8px 24px rgba(0,0,0,.18);
+    font-family: Arial, sans-serif;
+  `;
+
+  const labels = {
+    year: 'Год',
+    month: 'Месяц',
+    startWeek: 'Неделя начала',
+    endWeek: 'Неделя окончания',
+    post: 'Пост',
+    op: 'Оператор',
+    level: 'Уровень',
+    status: 'Статус',
+    formator: 'Форматор',
+    startDate: 'Дата начала обучения',
+    validDate: 'Дата валидации'
+  };
+
+  const title = document.createElement('div');
+
+  title.textContent = `Фильтр: ${labels[type] || ''}`;
+
+  title.style.cssText = `
+    margin-bottom: 10px;
+    font-weight: 700;
+    color: #0f172a;
+  `;
+
+  menu.appendChild(title);
+
+  if (type === 'startDate' || type === 'validDate') {
+    const fromKey =
+      type === 'startDate'
+        ? 'startDateFrom'
+        : 'validDateFrom';
+
+    const toKey =
+      type === 'startDate'
+        ? 'startDateTo'
+        : 'validDateTo';
+
+    const fromLabel = document.createElement('label');
+    fromLabel.textContent = 'Дата от';
+    fromLabel.style.display = 'block';
+
+    const fromInput = document.createElement('input');
+    fromInput.type = 'date';
+    fromInput.value = trainingFilters[fromKey];
+
+    fromInput.style.cssText = `
+      width: 100%;
+      box-sizing: border-box;
+      margin: 4px 0 10px;
+      padding: 7px;
+    `;
+
+    const toLabel = document.createElement('label');
+    toLabel.textContent = 'Дата до';
+    toLabel.style.display = 'block';
+
+    const toInput = document.createElement('input');
+    toInput.type = 'date';
+    toInput.value = trainingFilters[toKey];
+
+    toInput.style.cssText = `
+      width: 100%;
+      box-sizing: border-box;
+      margin: 4px 0 12px;
+      padding: 7px;
+    `;
+
+    menu.appendChild(fromLabel);
+    menu.appendChild(fromInput);
+    menu.appendChild(toLabel);
+    menu.appendChild(toInput);
+
+    menu.appendChild(
+      createTrainingFilterButtons(
+        () => {
+          trainingFilters[fromKey] = fromInput.value;
+          trainingFilters[toKey] = toInput.value;
+
+          closeTrainingFilterMenu();
+          renderTrainingTable();
+        },
+        () => {
+          trainingFilters[fromKey] = '';
+          trainingFilters[toKey] = '';
+
+          closeTrainingFilterMenu();
+          renderTrainingTable();
+        }
+      )
+    );
+  } else {
+    const values = [
+      ...new Set(
+        trainingRecords.map(record =>
+          String(record[type] ?? '')
+        )
+      )
+    ]
+      .filter(value => value !== '')
+      .sort((a, b) =>
+        a.localeCompare(
+          b,
+          'ru',
+          {
+            numeric: true,
+            sensitivity: 'base'
+          }
+        )
+      );
+
+    const search = document.createElement('input');
+    search.type = 'search';
+    search.placeholder = 'Поиск...';
+
+    search.style.cssText = `
+      width: 100%;
+      box-sizing: border-box;
+      margin-bottom: 8px;
+      padding: 7px;
+    `;
+
+    const selectAllLabel = document.createElement('label');
+
+    selectAllLabel.style.display = 'block';
+    selectAllLabel.style.marginBottom = '8px';
+
+    const selectAll = document.createElement('input');
+    selectAll.type = 'checkbox';
+    selectAll.checked = trainingFilters[type].length === 0;
+
+    selectAllLabel.appendChild(selectAll);
+    selectAllLabel.appendChild(
+      document.createTextNode(' Выбрать всё')
+    );
+
+    const valuesContainer = document.createElement('div');
+
+    valuesContainer.style.cssText = `
+      max-height: 230px;
+      overflow-y: auto;
+      margin-bottom: 12px;
+    `;
+
+    const checkboxes = [];
+
+    values.forEach(value => {
+      const label = document.createElement('label');
+
+      label.style.cssText = `
+        display: block;
+        padding: 4px 0;
+        cursor: pointer;
+      `;
+
+      const checkbox = document.createElement('input');
+
+      checkbox.type = 'checkbox';
+      checkbox.value = value;
+
+      checkbox.checked =
+        trainingFilters[type].length === 0 ||
+        trainingFilters[type].includes(value);
+
+      label.appendChild(checkbox);
+      label.appendChild(
+        document.createTextNode(` ${value}`)
+      );
+
+      valuesContainer.appendChild(label);
+
+      checkboxes.push({
+        checkbox,
+        label
+      });
+    });
+
+    selectAll.addEventListener('change', () => {
+      checkboxes.forEach(item => {
+        item.checkbox.checked = selectAll.checked;
+      });
+    });
+
+    search.addEventListener('input', () => {
+      const query =
+        search.value.toLocaleLowerCase('ru');
+
+      checkboxes.forEach(item => {
+        const visible =
+          item.checkbox.value
+            .toLocaleLowerCase('ru')
+            .includes(query);
+
+        item.label.style.display =
+          visible ? 'block' : 'none';
+      });
+    });
+
+    menu.appendChild(search);
+    menu.appendChild(selectAllLabel);
+    menu.appendChild(valuesContainer);
+
+    menu.appendChild(
+      createTrainingFilterButtons(
+        () => {
+          const selected = checkboxes
+            .filter(item => item.checkbox.checked)
+            .map(item => item.checkbox.value);
+
+          trainingFilters[type] =
+            selected.length === values.length
+              ? []
+              : selected;
+
+          closeTrainingFilterMenu();
+          renderTrainingTable();
+        },
+        () => {
+          trainingFilters[type] = [];
+
+          closeTrainingFilterMenu();
+          renderTrainingTable();
+        }
+      )
+    );
+  }
+
+  document.body.appendChild(menu);
+
+  const rect =
+    event.currentTarget.getBoundingClientRect();
+
+  let left = rect.left;
+  let top = rect.bottom + 5;
+
+  if (left + 280 > window.innerWidth) {
+    left = window.innerWidth - 290;
+  }
+
+  if (top + 420 > window.innerHeight) {
+    top = rect.top - 425;
+  }
+
+  menu.style.left = `${Math.max(8, left)}px`;
+  menu.style.top = `${Math.max(8, top)}px`;
+
+  setTimeout(() => {
+    document.addEventListener(
+      'click',
+      closeTrainingFilterMenu,
+      { once: true }
+    );
+  }, 0);
+}
+
+function renderTrainingTable() {
+  const table = document.querySelector('#trainingTable');
+  const tbody = table?.querySelector('tbody');
+
+  if (!table || !tbody) {
+    return;
+  }
+
+  saveState();
+
+  const headers = table.querySelectorAll('thead th');
+
+  const filterTypes = [
+    'year',
+    'month',
+    'startWeek',
+    'endWeek',
+    'post',
+    'op',
+    'level',
+    'status',
+    'formator',
+    'startDate',
+    'validDate',
+    null,
+    null,
+    null
+  ];
+
+  const titles = [
+    'Год',
+    'Месяц',
+    'Неделя начала',
+    'Неделя окончания',
+    'Пост',
+    'Оператор',
+    'Уровень',
+    'Статус',
+    'Форматор',
+    'Дата начала обучения',
+    'Дата валидации',
+    'Срок обучения',
+    'Комментарий',
+    ''
+  ];
+
+  headers.forEach((header, index) => {
+    const type = filterTypes[index];
+
+    header.innerHTML = '';
+
+    const title = document.createElement('span');
+    title.textContent = titles[index];
+
+    header.appendChild(title);
+
+    if (!type) {
+      return;
+    }
+
+    let active = false;
+
+    if (type === 'startDate') {
+      active =
+        Boolean(trainingFilters.startDateFrom) ||
+        Boolean(trainingFilters.startDateTo);
+    } else if (type === 'validDate') {
+      active =
+        Boolean(trainingFilters.validDateFrom) ||
+        Boolean(trainingFilters.validDateTo);
+    } else {
+      active = trainingFilters[type].length > 0;
+    }
+
+    const button = document.createElement('button');
+
+    button.type = 'button';
+    button.textContent = active ? ' ▼' : ' ⏷';
+    button.title = 'Открыть фильтр';
+
+    button.style.cssText = `
+      margin-left: 6px;
+      padding: 1px 5px;
+      border: 1px solid #94a3b8;
+      border-radius: 4px;
+      background: ${
+        active
+          ? '#dbeafe'
+          : '#f8fafc'
+      };
+      color: #1e40af;
+      cursor: pointer;
+    `;
+
+    button.onclick = event => {
+      openTrainingFilterMenu(event, type);
+    };
+
+    header.appendChild(button);
+  });
+
+  if (trainingRecords.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td
+          colspan="14"
+          style="
+            text-align:center;
+            color:#94a3b8;
+            padding:40px;
+          "
+        >
+          Нет записей. Нажмите «+ Добавить запись»
+        </td>
+      </tr>
+    `;
+
+    return;
+  }
+
+  const filteredRecords =
+    getFilteredTrainingRecords();
+
+  if (filteredRecords.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td
+          colspan="14"
+          style="
+            text-align:center;
+            color:#94a3b8;
+            padding:40px;
+          "
+        >
+          Нет записей по выбранным фильтрам.
+        </td>
+      </tr>
+    `;
+
+    return;
+  }
+
+  tbody.innerHTML = filteredRecords
+    .map(item => {
+      const r = item.record;
+      const i = item.originalIndex;
+
+      return `
+        <tr>
+          <td>${r.year}</td>
+          <td>${r.month}</td>
+          <td>${r.startWeek}</td>
+          <td>${r.endWeek}</td>
+          <td>${r.post}</td>
+          <td>${r.op}</td>
+          <td>${r.level}</td>
+
+          <td
+            style="cursor:pointer;color:#2563eb;"
+            onclick="editTrainingField(${i}, 'status')"
+          >
+            ${r.status}
+          </td>
+
+          <td>${r.formator}</td>
+
+          <td>${r.startDate}</td>
+
+          <td
+            style="cursor:pointer;color:#2563eb;"
+            onclick="editTrainingField(${i}, 'validDate')"
+          >
+            ${r.validDate}
+          </td>
+
+          <td>${r.duration}</td>
+
+          <td
+            style="cursor:pointer;color:#2563eb;"
+            onclick="editTrainingField(${i}, 'comment')"
+          >
+            ${r.comment}
+          </td>
+
+          <td>
+            <span
+              style="cursor:pointer;color:#ef4444;"
+              onclick="deleteTrainingRecord(${i})"
+            >
+              ✕
+            </span>
+          </td>
+        </tr>
+      `;
+    })
+    .join('');
 }
 
 function editTrainingField(index, field) {

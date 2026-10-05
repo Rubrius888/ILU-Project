@@ -263,18 +263,24 @@ function calculateStatsSnapshot() {
     let hasU = false;
 
     for (let c = 0; c < operators.length; c++) {
-      if (operatorRoles[c] === 'ДС') {
-        continue;
-      }
-
       const status = attendanceData[r]?.[c];
       const level = data[r]?.[c];
+      const isExternalOperator = operatorRoles[c] === 'ДС';
 
       if (status === '○' || status === '△') {
         hasOperator = true;
       }
 
-      if (status === '△') {
+      if (
+        !isExternalOperator &&
+        (
+          status === '△' ||
+          (
+            status === '○' &&
+            (level === 'Iкр' || level === 'Lкр')
+          )
+        )
+      ) {
         hasTraining = true;
       }
 
@@ -736,6 +742,8 @@ function getStatsRiskRows() {
   return posts
     .map((post, row) => {
       let hasOperator = false;
+      let hasOwnOperator = false;
+      let hasExternalOperator = false;
       let hasTraining = false;
       let hasU = false;
       let hasIkr = false;
@@ -745,29 +753,28 @@ function getStatsRiskRows() {
         col < operators.length;
         col++
       ) {
-        if (operatorRoles[col] === 'ДС') {
-          continue;
-        }
-
         const status = attendanceData[row]?.[col];
         const level = data[row]?.[col];
+        const isExternalOperator = operatorRoles[col] === 'ДС';
+
+        if (status === '○' || status === '△') {
+          hasOperator = true;
+
+          if (isExternalOperator) {
+            hasExternalOperator = true;
+          } else {
+            hasOwnOperator = true;
+          }
+        }
 
         if (
-          operatorRoles[col] !== 'НУ' &&
-          operatorRoles[col] !== 'ДС' &&
+          !isExternalOperator &&
           level === 'Iкр'
         ) {
           hasIkr = true;
         }
 
-        if (
-          status === '○' ||
-          status === '△'
-        ) {
-          hasOperator = true;
-        }
-
-        if (status === '△') {
+        if (!isExternalOperator && status === '△') {
           hasTraining = true;
         }
 
@@ -796,6 +803,8 @@ function getStatsRiskRows() {
         ? 'Незаполнен'
         : (hasTraining || hasIkr)
           ? 'Есть обучение'
+          : hasExternalOperator && !hasOwnOperator
+            ? 'Закрыт оператором ДС'
           : 'Нет U',
 
         u: hasU ? 'Да' : 'Нет',
