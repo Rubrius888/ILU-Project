@@ -1,5 +1,24 @@
 // ======================== ЛОГИКА ВЗАИМОДЕЙСТВИЯ ========================
 
+function hasStartedCriticalTraining(row, col) {
+  if (!Array.isArray(trainingRecords)) {
+    return false;
+  }
+
+  const level = data[row]?.[col];
+
+  if (level !== 'Iкр' && level !== 'Lкр') {
+    return false;
+  }
+
+  return trainingRecords.some(record =>
+    record.post === posts[row] &&
+    record.op === operators[col] &&
+    record.level === level &&
+    record.status === 'В процессе'
+  );
+}
+
 // Изменение статуса оператора на конкретном посту (○ стоит, △ обучается, пусто)
 function cyclePostStatus(row, col) {
   const td = document.querySelector(
@@ -24,13 +43,25 @@ function cyclePostStatus(row, col) {
     }
 
     if (option.value === '○') {
+      if (
+        (currentLevel === 'Iкр' || currentLevel === 'Lкр') &&
+        (
+          cur !== '△' ||
+          !hasStartedCriticalTraining(row, col)
+        )
+      ) {
+        return false;
+      }
+
       return currentLevel !== null &&
         currentLevel !== '';
     }
 
     if (option.value === '△') {
-      return currentLevel === 'Iкр' &&
-        operatorRoles[col] !== 'ДС';
+      return (
+        (currentLevel === 'Iкр' || currentLevel === 'Lкр') &&
+        operatorRoles[col] !== 'ДС'
+      );
     }
 
     return true;
@@ -45,6 +76,22 @@ function cyclePostStatus(row, col) {
       if (newVal === '') {
         attendanceData[row][col] = '';
         renderMatrix();
+        return;
+      }
+
+      if (
+        newVal === '○' &&
+        (data[row][col] === 'Iкр' ||
+          data[row][col] === 'Lкр') &&
+        (
+          attendanceData[row][col] !== '△' ||
+          !hasStartedCriticalTraining(row, col)
+        )
+      ) {
+        alert(
+          'Сначала поставьте оператору △ «Обучается» ' +
+          'и сохраните запись «В процессе» в журнале обучения.'
+        );
         return;
       }
 
@@ -171,6 +218,17 @@ function cycleLevel(row, col) {
     return true;
   });
   showInlineSelect(td, cur, options, (newVal) => {
+    if (
+      (newVal === 'Iкр' || newVal === 'Lкр') &&
+      attendanceData[row][col] === '○'
+    ) {
+      alert(
+        'Нельзя поставить Iкр или Lкр оператору, ' +
+        'который уже стоит на посту. Сначала поставьте △.'
+      );
+      return;
+    }
+
     // Очистка уровня означает, что оператор больше не закреплён
     // за этим постом. Убираем и статус постановки, и незавершённое
     // обучение по этой связке «пост + оператор».
@@ -198,7 +256,25 @@ function cycleLevel(row, col) {
       }
     }
 
-    data[row][col] = newVal;
+    const remainsOnPost =
+      attendanceData[row][col] === '○';
+
+    const shouldStartLcrTraining =
+      cur === 'Iкр' &&
+      newVal === 'I' &&
+      remainsOnPost;
+
+    data[row][col] = shouldStartLcrTraining
+      ? 'Lкр'
+      : newVal;
+
+    if (
+      shouldStartLcrTraining &&
+      operatorRoles[col] !== 'ДС' &&
+      typeof createAutomaticLcrTrainingRecord === 'function'
+    ) {
+      createAutomaticLcrTrainingRecord(row, col);
+    }
 
     if (
       newVal === '' &&

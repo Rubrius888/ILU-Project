@@ -197,6 +197,23 @@ function openPlacementFilterMenu(event, type) {
       padding: 7px;
     `;
 
+    const syncDateRangeLimits = () => {
+      toInput.min = fromInput.value || '';
+      fromInput.max = toInput.value || '';
+    };
+
+    fromInput.addEventListener(
+      'change',
+      syncDateRangeLimits
+    );
+
+    toInput.addEventListener(
+      'change',
+      syncDateRangeLimits
+    );
+
+    syncDateRangeLimits();
+
     menu.appendChild(fromLabel);
     menu.appendChild(fromInput);
     menu.appendChild(toLabel);
@@ -204,6 +221,17 @@ function openPlacementFilterMenu(event, type) {
 
     const buttons = createPlacementFilterButtons(
       () => {
+        if (
+          fromInput.value &&
+          toInput.value &&
+          toInput.value < fromInput.value
+        ) {
+          alert(
+            'Дата «до» не может быть раньше даты «от».'
+          );
+          return;
+        }
+
         placementFilters.dateFrom = fromInput.value;
         placementFilters.dateTo = toInput.value;
         closePlacementFilterMenu();

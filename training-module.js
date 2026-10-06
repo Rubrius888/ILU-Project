@@ -163,7 +163,13 @@ function openTrainingRecordForm(options = {}) {
   });
 
   levelSelect.value = automatic
-    ? 'Iкр'
+    ? (
+        ['Iкр', 'Lкр'].includes(
+          data[initialRow]?.[initialCol]
+        )
+          ? data[initialRow][initialCol]
+          : 'Iкр'
+      )
     : (
         data[initialRow]?.[initialCol] ||
         'Iкр'
@@ -260,6 +266,9 @@ function openTrainingRecordForm(options = {}) {
 
     endInput.value =
       formatDateForInput(calculatedEndDate);
+
+    endInput.min = startInput.value || '';
+    startInput.max = endInput.value || '';
   }
 
   function updateFormatorList() {
@@ -357,6 +366,11 @@ function openTrainingRecordForm(options = {}) {
     'change',
     updateDefaultEndDate
   );
+
+  endInput.addEventListener('change', () => {
+    endInput.min = startInput.value || '';
+    startInput.max = endInput.value || '';
+  });
 
   updateFormatorList();
   updateDefaultEndDate();
@@ -677,10 +691,63 @@ function getWeekNumber(date) {
   return Math.ceil((days + startOfYear.getDay() + 1) / 7);
 }
 
+function clearTrainingPlacementIfNeeded(record) {
+  if (
+    !record ||
+    !['Iкр', 'Lкр'].includes(record.level)
+  ) {
+    return false;
+  }
+
+  const row = posts.indexOf(record.post);
+  const column = operators.indexOf(record.op);
+
+  if (row < 0 || column < 0) {
+    return false;
+  }
+
+  // Не стираем более новое состояние матрицы, если обучение уже
+  // завершили или уровень был изменён после создания записи.
+  if (data[row]?.[column] !== record.level) {
+    return false;
+  }
+
+  data[row][column] = null;
+
+  if (attendanceData[row]?.[column]) {
+    attendanceData[row][column] = '';
+  }
+
+  return true;
+}
+
 function deleteTrainingRecord(index) {
   if (!confirm('Удалить запись об обучении?')) return;
+
+  const record = trainingRecords[index];
+
   trainingRecords.splice(index, 1);
+
+  // Если это была последняя запись обучения Iкр/Lкр для этой пары,
+  // освобождаем соответствующую ячейку матрицы и постановку на пост.
+  const hasAnotherTrainingRecord = record &&
+    ['Iкр', 'Lкр'].includes(record.level) &&
+    trainingRecords.some(item =>
+      item.post === record.post &&
+      item.op === record.op &&
+      item.level === record.level &&
+      item.status !== 'Завершено'
+    );
+
+  const placementCleared =
+    !hasAnotherTrainingRecord &&
+    clearTrainingPlacementIfNeeded(record);
+
   renderTrainingTable();
+
+  if (placementCleared) {
+    renderMatrix();
+  }
 }
 
 function applyTrainingValidation(record) {
@@ -980,6 +1047,23 @@ function openTrainingFilterMenu(event, type) {
       padding: 7px;
     `;
 
+    const syncDateRangeLimits = () => {
+      toInput.min = fromInput.value || '';
+      fromInput.max = toInput.value || '';
+    };
+
+    fromInput.addEventListener(
+      'change',
+      syncDateRangeLimits
+    );
+
+    toInput.addEventListener(
+      'change',
+      syncDateRangeLimits
+    );
+
+    syncDateRangeLimits();
+
     menu.appendChild(fromLabel);
     menu.appendChild(fromInput);
     menu.appendChild(toLabel);
@@ -988,6 +1072,17 @@ function openTrainingFilterMenu(event, type) {
     menu.appendChild(
       createTrainingFilterButtons(
         () => {
+          if (
+            fromInput.value &&
+            toInput.value &&
+            toInput.value < fromInput.value
+          ) {
+            alert(
+              'Дата «до» не может быть раньше даты «от».'
+            );
+            return;
+          }
+
           trainingFilters[fromKey] = fromInput.value;
           trainingFilters[toKey] = toInput.value;
 

@@ -78,6 +78,20 @@
     </button>
   </div>
 
+  <div class="info-cards-toolbar">
+    <button
+      id="toggleInfoCardsButton"
+      class="btn-small info-cards-toggle"
+      type="button"
+      aria-expanded="true"
+      aria-controls="matrixInfo"
+      onclick="toggleInfoCards()"
+      title="Свернуть информационные карточки"
+    >
+      ▴ Свернуть инфокарты
+    </button>
+  </div>
+
   <div class="middle-row" id="matrixInfo">
 
     <div class="date-bar" id="dateBar"></div>
@@ -348,20 +362,80 @@
           </p>
         </div>
 
-        <label class="stats-period-control">
-          <span>Период графика</span>
+        <div class="stats-period-controls">
 
-          <select
-            id="statsPeriodSelect"
-            onchange="renderStatsDashboard()"
-          >
-            <option value="30">Последние 30 дней</option>
-            <option value="90">Последние 90 дней</option>
-            <option value="year">Текущий год</option>
-            <option value="all">Вся доступная история</option>
-          </select>
-        </label>
+  <label class="stats-period-control">
+    <span>Количество снимков</span>
+
+    <select
+      id="statsPeriodSelect"
+      onchange="renderStatsDashboard()"
+    >
+      <option value="30">30 снимков</option>
+      <option value="90">90 снимков</option>
+      <option value="365">365 снимков</option>
+    </select>
+  </label>
+
+  <div class="stats-date-filter">
+    <button
+      id="statsDateFilterButton"
+      class="btn-small"
+      type="button"
+      aria-expanded="false"
+      aria-controls="statsDateFilterPanel"
+      onclick="toggleStatsDateFilter()"
+    >
+      📅 Период дат
+    </button>
+
+    <div
+      id="statsDateFilterPanel"
+      class="stats-date-filter-panel"
+      hidden
+    >
+      <label class="stats-date-control">
+        <span>Дата от</span>
+
+        <input
+          id="statsDateFrom"
+          type="date"
+          onchange="syncStatsDateRangeInputs()"
+        >
+      </label>
+
+      <label class="stats-date-control">
+        <span>Дата до</span>
+
+        <input
+          id="statsDateTo"
+          type="date"
+          onchange="syncStatsDateRangeInputs()"
+        >
+      </label>
+
+      <div class="stats-date-actions">
+        <button
+          class="btn-small"
+          type="button"
+          onclick="applyStatsDateRange()"
+        >
+          Применить
+        </button>
+
+        <button
+          class="btn-small"
+          type="button"
+          onclick="resetStatsDateRange()"
+        >
+          Сбросить
+        </button>
       </div>
+    </div>
+  </div>
+  </div>
+
+</div>
 
       <div class="stats-kpi-grid">
 
@@ -417,54 +491,125 @@
 
       <div class="stats-dashboard-grid">
 
-        <section class="stats-panel">
-          <div class="stats-panel-heading">
-            <h3>Рост поливалентности</h3>
-            <span>ежедневные снимки</span>
-          </div>
+  <section class="stats-panel stats-polyvalence-panel">
+    <div class="stats-panel-heading">
+      <h3>Динамика поливалентности</h3>
+      <span>по выбранному количеству снимков</span>
+    </div>
+
+    <div class="stats-polyvalence-grid">
+
+      <div class="stats-polyvalence-group">
+        <div class="stats-polyvalence-card stats-polyvalence-average">
+          <h4>Среднее 2L</h4>
 
           <div
-            id="polyvalenceChart"
+            id="polyvalenceAverage2LChart"
             class="stats-chart"
             aria-live="polite"
           ></div>
-        </section>
+        </div>
 
-        <section class="stats-panel">
-          <div class="stats-panel-heading">
-            <h3>Уровни ILU</h3>
-            <span>заполненные ячейки матрицы</span>
+        <div class="stats-polyvalence-subgrid">
+
+          <div class="stats-polyvalence-card">
+            <h4>2L — посты</h4>
+
+            <div
+              id="polyvalencePost2LChart"
+              class="stats-chart"
+              aria-live="polite"
+            ></div>
           </div>
 
-          <div
-            id="levelsChart"
-            class="levels-chart"
-            aria-live="polite"
-          ></div>
-        </section>
+          <div class="stats-polyvalence-card">
+            <h4>2L — операторы</h4>
 
+            <div
+              id="polyvalenceOperator2LChart"
+              class="stats-chart"
+              aria-live="polite"
+            ></div>
+          </div>
+
+        </div>
       </div>
 
-      <section class="stats-panel stats-risk-panel">
-        <div class="stats-panel-heading">
-          <h3>Посты, требующие внимания</h3>
-          <span>незаполненные, без U или с обучением</span>
+      <div class="stats-polyvalence-group">
+        <div class="stats-polyvalence-card stats-polyvalence-average">
+          <h4>Среднее 3L</h4>
+
+          <div
+            id="polyvalenceAverage3LChart"
+            class="stats-chart"
+            aria-live="polite"
+          ></div>
         </div>
 
-        <div class="stats-risk-table-wrap">
-          <table id="statsRiskTable" class="stats-risk-table">
-            <thead>
-              <tr>
-                <th>Пост</th>
-                <th>Состояние</th>
-                <th>U</th>
-                <th>Обучение</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+        <div class="stats-polyvalence-subgrid">
+
+          <div class="stats-polyvalence-card">
+            <h4>3L — посты</h4>
+
+            <div
+              id="polyvalencePost3LChart"
+              class="stats-chart"
+              aria-live="polite"
+            ></div>
+          </div>
+
+          <div class="stats-polyvalence-card">
+            <h4>3L — операторы</h4>
+
+            <div
+              id="polyvalenceOperator3LChart"
+              class="stats-chart"
+              aria-live="polite"
+            ></div>
+          </div>
+
         </div>
-      </section>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="stats-panel stats-levels-panel">
+    <div class="stats-panel-heading">
+      <h3>Уровни ILU</h3>
+      <span>заполненные ячейки матрицы</span>
+    </div>
+
+    <div
+      id="levelsChart"
+      class="levels-chart"
+      aria-live="polite"
+    ></div>
+  </section>
+
+  <section class="stats-panel stats-risk-panel">
+    <div class="stats-panel-heading">
+      <h3>Посты, требующие внимания</h3>
+      <span>незаполненные, без U или с обучением</span>
+    </div>
+
+    <div class="stats-risk-table-wrap">
+      <table id="statsRiskTable" class="stats-risk-table">
+        <thead>
+          <tr>
+            <th>Пост</th>
+            <th>Состояние</th>
+            <th>U</th>
+            <th>Обучение</th>
+          </tr>
+        </thead>
+
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+</div>
 
       <div class="stats-rating-grid">
 
@@ -541,7 +686,6 @@
     </div>
   </div>
 
-  <!-- ОБУЧЕНИЯ -->
   <div id="training" class="tab-content">
     <div class="section-toolbar">
       <div class="add-buttons-top">
@@ -595,7 +739,6 @@
     </div>
   </div>
 
-  <!-- РОТАЦИЯ -->
   <div id="rotation" class="tab-content">
     <div class="section-toolbar">
       <div class="add-buttons-top" style="gap:8px;">
@@ -644,7 +787,6 @@
     </div>
   </div>
 
-  <!-- ПЛАНИНГ РАЗВИТИЯ -->
   <div id="planning" class="tab-content">
     <div class="section-toolbar">
       <div class="add-buttons-top">
@@ -680,7 +822,6 @@
     </div>
   </div>
 
-  <!-- ЖУРНАЛ РАССТАНОВКИ -->
   <div id="placementLog" class="tab-content">
     <div class="matrix-container" style="overflow-x:auto;">
       <table id="placementLogTable">

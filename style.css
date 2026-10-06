@@ -138,6 +138,29 @@ body {
   font-size: 14px;
 }
 
+/* Управление видимостью информационных карточек. */
+.info-cards-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 28px;
+  margin-bottom: 6px;
+}
+
+.info-cards-toggle {
+  white-space: nowrap;
+}
+
+#matrixInfo.info-cards-collapsed {
+  min-height: 0;
+}
+
+#matrixInfo.info-cards-collapsed > .date-bar,
+#matrixInfo.info-cards-collapsed > .info-card,
+#matrixInfo.info-cards-collapsed > .stats-card,
+#matrixInfo.info-cards-collapsed > .export-buttons {
+  display: none !important;
+}
+
 /* Календарь */
 .date-bar {
   background: white;
@@ -632,6 +655,74 @@ td:first-child {
   border-color: #3b82f6;
 }
 
+.stats-period-controls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.stats-date-control {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 140px;
+}
+
+.stats-date-control span {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.35px;
+  text-transform: uppercase;
+}
+
+.stats-date-control input {
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 12px;
+}
+
+.stats-date-control input:focus {
+  outline: 2px solid #3b82f6;
+  border-color: #3b82f6;
+}
+
+.stats-date-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 1px;
+}
+
+.stats-date-filter {
+  position: relative;
+}
+
+.stats-date-filter-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+}
+
+.stats-date-filter-panel[hidden] {
+  display: none;
+}
+
 .stats-kpi-grid {
   display: grid;
   grid-template-columns: repeat(8, minmax(130px, 1fr));
@@ -669,7 +760,7 @@ td:first-child {
 
 .stats-dashboard-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -701,6 +792,76 @@ td:first-child {
 
 .stats-chart {
   min-height: 250px;
+}
+
+.stats-polyvalence-panel {
+  grid-column: 1 / -1;
+}
+
+.stats-polyvalence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stats-polyvalence-group {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.stats-polyvalence-subgrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stats-polyvalence-card {
+  min-width: 0;
+  padding: 10px 10px 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.stats-polyvalence-card h4 {
+  margin: 0 0 4px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.stats-polyvalence-card .stats-chart {
+  min-height: 170px;
+}
+
+.stats-polyvalence-average .stats-chart {
+  min-height: 230px;
+}
+
+.stats-polyvalence-average .stats-mini-line-chart {
+  height: 230px;
+}
+
+.stats-mini-line-chart {
+  height: 180px;
+}
+
+@media (max-width: 900px) {
+  .stats-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-polyvalence-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .stats-polyvalence-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .stats-chart-empty,
@@ -763,11 +924,11 @@ td:first-child {
 }
 
 .levels-chart {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 17px;
-  min-height: 250px;
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: center;
+  gap: 12px;
+  min-height: 0;
 }
 
 .level-bar-row {
@@ -800,6 +961,18 @@ td:first-child {
   height: 100%;
   min-width: 2px;
   border-radius: inherit;
+}
+
+@media (max-width: 900px) {
+  .levels-chart {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .levels-chart {
+    grid-template-columns: 1fr;
+  }
 }
 
 .stats-risk-panel {
@@ -1387,6 +1560,7 @@ body {
   }
 
   body.is-printing .section-toolbar,
+  body.is-printing .info-cards-toolbar,
   body.is-printing .add-buttons-top,
   body.is-printing .print-button,
   body.is-printing .export-buttons,

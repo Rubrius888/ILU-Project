@@ -423,6 +423,75 @@ function updateDateBar() {
     `<div>📅 Дата: <span>${dateString}</span></div>`;
 }
 
+// ======================== ИНФОРМАЦИОННЫЕ КАРТОЧКИ ========================
+
+const INFO_CARDS_COLLAPSED_KEY =
+  'ilu-se4-info-cards-collapsed';
+
+function setInfoCardsCollapsed(collapsed) {
+  const container = document.getElementById('matrixInfo');
+  const button = document.getElementById('toggleInfoCardsButton');
+
+  if (!container || !button) {
+    return;
+  }
+
+  const isCollapsed = Boolean(collapsed);
+
+  container.classList.toggle(
+    'info-cards-collapsed',
+    isCollapsed
+  );
+
+  button.setAttribute(
+    'aria-expanded',
+    String(!isCollapsed)
+  );
+
+  button.textContent = isCollapsed
+    ? '▾ Развернуть инфокарты'
+    : '▴ Свернуть инфокарты';
+
+  button.title = isCollapsed
+    ? 'Развернуть информационные карточки'
+    : 'Свернуть информационные карточки';
+}
+
+function toggleInfoCards() {
+  const container = document.getElementById('matrixInfo');
+
+  if (!container) {
+    return;
+  }
+
+  const collapsed =
+    !container.classList.contains('info-cards-collapsed');
+
+  setInfoCardsCollapsed(collapsed);
+
+  try {
+    localStorage.setItem(
+      INFO_CARDS_COLLAPSED_KEY,
+      collapsed ? '1' : '0'
+    );
+  } catch (error) {
+    // Режим без localStorage не должен ломать интерфейс.
+  }
+}
+
+function restoreInfoCardsState() {
+  let collapsed = false;
+
+  try {
+    collapsed =
+      localStorage.getItem(INFO_CARDS_COLLAPSED_KEY) === '1';
+  } catch (error) {
+    collapsed = false;
+  }
+
+  setInfoCardsCollapsed(collapsed);
+}
+
 // ======================== СИНХРОНИЗАЦИЯ ФИЛЬТРОВ ========================
 
 function updateInfoCard() {

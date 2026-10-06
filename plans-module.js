@@ -138,19 +138,95 @@ function generateDevelopmentPlan() {
     }
   }
 
-  // Этап 4: 3L по операторам
-  if (planAssignments.length === 0) {
-    const opsNeed3L = opPoly.filter(o => o.count < 3);
-    if (opsNeed3L.length > 0) {
-      for (const o of opsNeed3L) {
-        const bestPost = findBestPost(o.index);
-        if (bestPost) {
-          virtualCoverage[bestPost.index]++;
-          planAssignments.push({ postIndex: bestPost.index, opIndex: o.index, stage: '3L операторы' });
-        }
+  // Этап 4: дальнейшее развитие поливалентности операторов
+//
+// Этот этап запускается только после того, как предыдущие этапы
+// не создали назначений. То есть приоритет дефицита покрытия постов
+// до 2L / 3L сохраняется.
+//
+// Логика:
+// 1. Сначала берём операторов с минимальной поливалентностью.
+// 2. Для каждого оператора сначала стараемся продолжить уже
+//    начатое освоение I / Iкр.
+// 3. Если таких постов нет — выбираем новый доступный пост.
+// 4. Среди подходящих постов выбираем пост с минимальным
+//    текущим/виртуальным покрытием L/U.
+// 5. За одну генерацию оператор получает только одно новое обучение.
+
+if (planAssignments.length === 0) {
+  const sortedOps = [...opPoly].sort((a, b) => {
+    if (a.count !== b.count) {
+      return a.count - b.count;
+    }
+
+    return a.index - b.index;
+  });
+
+  const usedOps = new Set();
+
+  for (const o of sortedOps) {
+    if (usedOps.has(o.index)) continue;
+
+    const quickPosts = [];
+    const otherPosts = [];
+
+    for (const p of postCoverage) {
+      const lvl = data[p.index][o.index];
+
+      if (lvl === 'I' || lvl === 'Iкр') {
+        quickPosts.push(p);
+      } else if (
+        lvl === null ||
+        lvl === ''
+      ) {
+        otherPosts.push(p);
       }
     }
+
+    quickPosts.sort((a, b) => {
+      const coverageDiff =
+        virtualCoverage[a.index] -
+        virtualCoverage[b.index];
+
+      if (coverageDiff !== 0) {
+        return coverageDiff;
+      }
+
+      return a.index - b.index;
+    });
+
+    otherPosts.sort((a, b) => {
+      const coverageDiff =
+        virtualCoverage[a.index] -
+        virtualCoverage[b.index];
+
+      if (coverageDiff !== 0) {
+        return coverageDiff;
+      }
+
+      return a.index - b.index;
+    });
+
+    const bestPost =
+      quickPosts[0] ||
+      otherPosts[0] ||
+      null;
+
+    if (!bestPost) {
+      continue;
+    }
+
+    virtualCoverage[bestPost.index]++;
+
+    planAssignments.push({
+      postIndex: bestPost.index,
+      opIndex: o.index,
+      stage: 'Развитие поливалентности'
+    });
+
+    usedOps.add(o.index);
   }
+}
 
   // Если ничего не назначено — участок укомплектован
   if (planAssignments.length === 0) {
@@ -371,9 +447,8 @@ function editCalendarCell(event) {
   const menu = document.createElement('div');
   menu.className = 'context-menu';
   menu.innerHTML = `<div class="danger" onclick="deleteCalendarTraining('${opName}'); hideMenu();">🗑️ Удалить все обучения</div>`;
-  menu.style.left = event.clientX + 'px';
-  menu.style.top = event.clientY + 'px';
   document.body.appendChild(menu);
+  positionPlanContextMenu(menu, event);
   currentMenu = menu;
   setTimeout(() => document.addEventListener('click', hideMenu, { once: true }), 0);
 }
@@ -435,9 +510,8 @@ function addCalendarTraining(event) {
     html += `<div onclick="placeCalendarOp('${op}', ${postIndex}, ${dayIndex}); hideMenu();">${op}</div>`;
   });
   menu.innerHTML = html;
-  menu.style.left = event.clientX + 'px';
-  menu.style.top = event.clientY + 'px';
   document.body.appendChild(menu);
+  positionPlanContextMenu(menu, event);
   currentMenu = menu;
   setTimeout(() => document.addEventListener('click', hideMenu, { once: true }), 0);
 }
@@ -777,7 +851,7 @@ function generateRotationPlan() {
 }
 
 // ======================== РЕДАКТИРОВАНИЕ РОТАЦИИ ========================
-function positionRotationContextMenu(menu, event) {
+function positionPlanContextMenu(menu, event) {
   const margin = 8;
 
   menu.style.position = 'fixed';
@@ -813,7 +887,7 @@ function editRotationCell(event) {
   menu.className = 'context-menu';
   menu.innerHTML = `<div class="danger" onclick="deleteRotationOp('${opName}', ${td.getAttribute('data-post')}); hideMenu();">🗑️ Убрать оператора</div>`;
   document.body.appendChild(menu);
-  positionRotationContextMenu(menu, event);
+  positionPlanContextMenu(menu, event);
   currentMenu = menu;
   setTimeout(() => document.addEventListener('click', hideMenu, { once: true }), 0);
 }
@@ -874,7 +948,7 @@ function addRotationOp(event) {
   });
   menu.innerHTML = html;
   document.body.appendChild(menu);
-  positionRotationContextMenu(menu, event);
+  positionPlanContextMenu(menu, event);
   currentMenu = menu;
   setTimeout(() => document.addEventListener('click', hideMenu, { once: true }), 0);
 }

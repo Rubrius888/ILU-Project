@@ -355,6 +355,16 @@ function calculateStatsSnapshot() {
       ? Math.round((coveredByU / totalPosts) * 100)
       : 0,
 
+    // Сохраняем раздельные показатели, чтобы статистика могла
+    // показывать поливалентность операторов, постов и среднее значение.
+    polyvalenceOperator2L: getStatsPercent(poly.percentOps2L),
+    polyvalenceOperator3L: getStatsPercent(poly.percentOps3L),
+    polyvalencePost2L: getStatsPercent(poly.percent2L),
+    polyvalencePost3L: getStatsPercent(poly.percent3L),
+    polyvalenceAverage2L: getStatsPercent(poly.total2L),
+    polyvalenceAverage3L: getStatsPercent(poly.total3L),
+
+    // Старые имена оставляем для совместимости с сохранёнными данными.
     polyvalence2L: getStatsPercent(poly.total2L),
     polyvalence3L: getStatsPercent(poly.total3L),
 
@@ -428,10 +438,89 @@ function getSelectedStatsPeriod() {
   return select?.value || '30';
 }
 
+function getStatsDateRange() {
+  return {
+    from: document.getElementById('statsDateFrom')?.value || '',
+    to: document.getElementById('statsDateTo')?.value || ''
+  };
+}
+
+function syncStatsDateRangeInputs() {
+  const from = document.getElementById('statsDateFrom');
+  const to = document.getElementById('statsDateTo');
+
+  if (!from || !to) {
+    return;
+  }
+
+  to.min = from.value || '';
+  from.max = to.value || '';
+}
+
+function toggleStatsDateFilter() {
+  const panel = document.getElementById('statsDateFilterPanel');
+  const button = document.getElementById('statsDateFilterButton');
+
+  if (!panel) {
+    return;
+  }
+
+  panel.hidden = !panel.hidden;
+
+  if (button) {
+    button.setAttribute('aria-expanded', String(!panel.hidden));
+  }
+
+  if (!panel.hidden) {
+    syncStatsDateRangeInputs();
+  }
+}
+
+function applyStatsDateRange() {
+  const { from, to } = getStatsDateRange();
+
+  if (from && to && from > to) {
+    alert('Дата «до» не может быть раньше даты «от».');
+    return;
+  }
+
+  renderStatsDashboard();
+  closeStatsDateFilter();
+}
+
+function resetStatsDateRange() {
+  const from = document.getElementById('statsDateFrom');
+  const to = document.getElementById('statsDateTo');
+
+  if (from) from.value = '';
+  if (to) to.value = '';
+
+  syncStatsDateRangeInputs();
+  renderStatsDashboard();
+  closeStatsDateFilter();
+}
+
+function closeStatsDateFilter() {
+  const panel = document.getElementById('statsDateFilterPanel');
+  const button = document.getElementById('statsDateFilterButton');
+
+  if (panel) panel.hidden = true;
+  if (button) button.setAttribute('aria-expanded', 'false');
+}
+
 function getStatsHistoryForPeriod() {
   const history = Array.isArray(statsHistory)
     ? statsHistory
     : [];
+
+  const { from, to } = getStatsDateRange();
+
+  if (from || to) {
+    return history.filter(item =>
+      (!from || item.date >= from) &&
+      (!to || item.date <= to)
+    );
+  }
 
   const period = getSelectedStatsPeriod();
 
@@ -447,188 +536,328 @@ function getStatsHistoryForPeriod() {
     );
   }
 
-  const days = Number(period);
+  const snapshotCount = Number(period);
 
-  if (!Number.isFinite(days)) {
+  if (!Number.isFinite(snapshotCount)) {
     return history.slice();
   }
 
-  const startDate = new Date();
-
-  startDate.setHours(0, 0, 0, 0);
-  startDate.setDate(
-    startDate.getDate() - days + 1
-  );
-
-  const startKey = getStatsDateKey(startDate);
-
-  return history.filter(item =>
-    item.date >= startKey
-  );
+  return history.slice(-Math.max(1, snapshotCount));
 }
 
 function renderPolyvalenceChart() {
-  const container =
-    document.getElementById('polyvalenceChart');
+  const charts = [
+    {
+      id: 'polyvalenceOperator2LChart',
+      key: 'polyvalenceOperator2L',
+      label: '2L — операторы',
+      color: '#2563eb'
+    },
+    {
+      id: 'polyvalenceOperator3LChart',
+      key: 'polyvalenceOperator3L',
+      label: '3L — операторы',
+      color: '#16a34a'
+    },
+    {
+      id: 'polyvalencePost2LChart',
+      key: 'polyvalencePost2L',
+      label: '2L — посты',
+      color: '#d97706'
+    },
+    {
+      id: 'polyvalencePost3LChart',
+      key: 'polyvalencePost3L',
+      label: '3L — посты',
+      color: '#0891b2'
+    },
+    {
+      id: 'polyvalenceAverage2LChart',
+      key: 'polyvalenceAverage2L',
+      label: 'Среднее 2L',
+      color: '#7c3aed'
+    },
+    {
+      id: 'polyvalenceAverage3LChart',
+      key: 'polyvalenceAverage3L',
+      label: 'Среднее 3L',
+      color: '#dc2626'
+    }
+  ];
 
-  if (!container) {
-    return;
-  }
+  const history = getPolyvalenceChartHistory();
 
-  const history =
-  getStatsHistoryForPeriod().slice(-12);
+  const getMetricValue = (item, key) => {
+    const value = Number(item?.[key]);
 
-  if (history.length === 0) {
-    container.innerHTML =
-      '<div class="stats-chart-empty">' +
-      'Снимки появятся после накопления статистики.' +
-      '</div>';
+    if (Number.isFinite(value)) {
+      return getStatsPercent(value);
+    }
 
-    return;
-  }
+    // Старые снимки содержат только средние 2L/3L.
+    if (key === 'polyvalenceAverage2L') {
+      return getStatsPercent(item?.polyvalence2L);
+    }
 
-  const width = 680;
-  const height = 250;
-  const left = 42;
-  const right = 18;
-  const top = 20;
-  const bottom = 42;
+    if (key === 'polyvalenceAverage3L') {
+      return getStatsPercent(item?.polyvalence3L);
+    }
 
-  const chartWidth = width - left - right;
-  const chartHeight = height - top - bottom;
+    return null;
+  };
 
-  const x = index =>
-    history.length === 1
-      ? left + chartWidth / 2
-      : left +
-        (index / (history.length - 1)) *
-          chartWidth;
+  charts.forEach(({ id, key, label, color }) => {
+    const container = document.getElementById(id);
 
-  const y = value =>
-    top +
-    chartHeight -
-    (getStatsPercent(value) / 100) *
-      chartHeight;
+    if (!container) {
+      return;
+    }
 
-  const line = key =>
-    history
-      .map((item, index) =>
-        `${index === 0 ? 'M' : 'L'} ` +
-        `${x(index).toFixed(1)} ` +
-        `${y(item[key]).toFixed(1)}`
+    if (history.length === 0) {
+      container.innerHTML =
+        '<div class="stats-chart-empty">' +
+        'Снимки появятся после накопления статистики.' +
+        '</div>';
+      return;
+    }
+
+    const values = history.map(item =>
+      getMetricValue(item, key)
+    );
+
+    if (!values.some(value => value !== null)) {
+      container.innerHTML =
+        '<div class="stats-chart-empty">' +
+        'Данные появятся после следующего снимка.' +
+        '</div>';
+      return;
+    }
+
+    const isAverageChart = Boolean(
+      container.closest('.stats-polyvalence-average')
+    );
+    const width = Math.max(
+      360,
+      Math.round(
+        container.clientWidth ||
+          (isAverageChart ? 680 : 360)
       )
-      .join(' ');
+    );
+    const height = isAverageChart ? 230 : 180;
+    const left = 36;
+    const right = 10;
+    const top = 12;
+    const bottom = 30;
+    const chartWidth = width - left - right;
+    const chartHeight = height - top - bottom;
 
-  const circles = key =>
-    history
-      .map((item, index) =>
-        `<circle
-          cx="${x(index).toFixed(1)}"
-          cy="${y(item[key]).toFixed(1)}"
-          r="3.5"
-          class="chart-point-${key}"
-        ></circle>`
+    const x = index =>
+      history.length === 1
+        ? left + chartWidth / 2
+        : left +
+          (index / (history.length - 1)) *
+            chartWidth;
+
+    const y = value =>
+      top +
+      chartHeight -
+      (getStatsPercent(value) / 100) *
+        chartHeight;
+
+    let path = '';
+    let segment = '';
+
+    values.forEach((value, index) => {
+      if (value === null) {
+        path += segment;
+        segment = '';
+        return;
+      }
+
+      segment += `${segment ? 'L' : 'M'} ` +
+        `${x(index).toFixed(1)} ${y(value).toFixed(1)} `;
+    });
+
+    path += segment;
+
+    const circles = values
+      .map((value, index) => value === null
+        ? ''
+        : `<circle
+            cx="${x(index).toFixed(1)}"
+            cy="${y(value).toFixed(1)}"
+            r="3.5"
+            fill="${color}"
+          ><title>${history[index].date}: ${value}%</title></circle>`
       )
       .join('');
 
-  const grid = [0, 25, 50, 75, 100]
-    .map(value => {
-      const lineY = y(value).toFixed(1);
+    const grid = [0, 25, 50, 75, 100]
+      .map(value => {
+        const lineY = y(value).toFixed(1);
 
-      return `
+        return `
+          <line
+            x1="${left}"
+            y1="${lineY}"
+            x2="${width - right}"
+            y2="${lineY}"
+            class="chart-grid-line"
+          ></line>
+          <text
+            x="2"
+            y="${Number(lineY) + 4}"
+            class="chart-axis-label"
+          >${value}%</text>
+        `;
+      })
+      .join('');
+
+    const firstDate = history[0].date.slice(5);
+    const lastDate = history[history.length - 1].date.slice(5);
+
+    container.innerHTML = `
+      <svg
+        class="stats-line-chart stats-mini-line-chart"
+        viewBox="0 0 ${width} ${height}"
+        role="img"
+        aria-label="Динамика показателя ${label}"
+      >
+        ${grid}
         <line
           x1="${left}"
-          y1="${lineY}"
+          y1="${top + chartHeight}"
           x2="${width - right}"
-          y2="${lineY}"
-          class="chart-grid-line"
+          y2="${top + chartHeight}"
+          class="chart-axis-line"
         ></line>
-
+        <path
+          d="${path}"
+          class="chart-line"
+          stroke="${color}"
+        ></path>
+        ${circles}
         <text
-          x="6"
-          y="${Number(lineY) + 4}"
+          x="${left}"
+          y="${height - 8}"
           class="chart-axis-label"
-        >${value}%</text>
-      `;
-    })
-    .join('');
-
-  const firstDate = history[0].date.slice(5);
-  const lastDate =
-    history[history.length - 1].date.slice(5);
-
-  container.innerHTML = `
-    <svg
-      class="stats-line-chart"
-      viewBox="0 0 ${width} ${height}"
-      role="img"
-      aria-label="Динамика поливалентности 2L и 3L"
-    >
-      ${grid}
-
-      <line
-        x1="${left}"
-        y1="${top + chartHeight}"
-        x2="${width - right}"
-        y2="${top + chartHeight}"
-        class="chart-axis-line"
-      ></line>
-
-      <path
-        d="${line('polyvalence2L')}"
-        class="chart-line chart-line-2l"
-      ></path>
-
-      <path
-        d="${line('polyvalence3L')}"
-        class="chart-line chart-line-3l"
-      ></path>
-
-      ${circles('polyvalence2L')}
-      ${circles('polyvalence3L')}
-
-      <text
-        x="${left}"
-        y="${height - 12}"
-        class="chart-axis-label"
-      >${firstDate}</text>
-
-      <text
-        x="${width - right}"
-        y="${height - 12}"
-        text-anchor="end"
-        class="chart-axis-label"
-      >${lastDate}</text>
-
-      <g transform="translate(${left}, 8)">
-        <circle
-          cx="4"
-          cy="0"
-          r="4"
-          class="legend-dot-2l"
-        ></circle>
-
+        >${firstDate}</text>
         <text
-          x="12"
-          y="4"
-          class="chart-legend-label"
-        >2L</text>
+          x="${width - right}"
+          y="${height - 8}"
+          text-anchor="end"
+          class="chart-axis-label"
+        >${lastDate}</text>
+      </svg>
+    `;
+  });
+}
 
-        <circle
-          cx="52"
-          cy="0"
-          r="4"
-          class="legend-dot-3l"
-        ></circle>
+// Для новых раздельных графиков добавляем точки за 04.10 и 05.10,
+// если за эти даты ещё нет соответствующих показателей. Значения берутся
+// из текущего состояния матрицы и используются только при отрисовке графика.
+function getPolyvalenceChartHistory() {
+  const history = getStatsHistoryForPeriod()
+    .slice()
+    .sort((a, b) => a.date.localeCompare(b.date));
 
-        <text
-          x="60"
-          y="4"
-          class="chart-legend-label"
-        >3L</text>
-      </g>
-    </svg>
-  `;
+  const year = new Date().getFullYear();
+  const poly = window._polyData || {};
+  const today = history.find(item =>
+    item.date === getStatsDateKey()
+  ) || {};
+
+  const currentValue = (polyKey, snapshotKey, legacyKey) => {
+    const fromMatrix = Number(poly[polyKey]);
+
+    if (Number.isFinite(fromMatrix)) {
+      return getStatsPercent(fromMatrix);
+    }
+
+    const fromSnapshot = Number(today[snapshotKey]);
+
+    if (Number.isFinite(fromSnapshot)) {
+      return getStatsPercent(fromSnapshot);
+    }
+
+    return getStatsPercent(today[legacyKey]);
+  };
+
+  const current = {
+    polyvalenceOperator2L: currentValue(
+      'percentOps2L',
+      'polyvalenceOperator2L'
+    ),
+    polyvalenceOperator3L: currentValue(
+      'percentOps3L',
+      'polyvalenceOperator3L'
+    ),
+    polyvalencePost2L: currentValue(
+      'percent2L',
+      'polyvalencePost2L'
+    ),
+    polyvalencePost3L: currentValue(
+      'percent3L',
+      'polyvalencePost3L'
+    ),
+    polyvalenceAverage2L: currentValue(
+      'total2L',
+      'polyvalenceAverage2L',
+      'polyvalence2L'
+    ),
+    polyvalenceAverage3L: currentValue(
+      'total3L',
+      'polyvalenceAverage3L',
+      'polyvalence3L'
+    )
+  };
+
+  const demoRows = [
+    {
+      date: `${year}-10-04`,
+      ...current
+    },
+    {
+      date: `${year}-10-05`,
+      ...current
+    }
+  ];
+
+  const { from, to } = getStatsDateRange();
+  const isInSelectedRange = date =>
+    (!from || date >= from) &&
+    (!to || date <= to);
+
+  const byDate = new Map(
+    history.map(item => [item.date, { ...item }])
+  );
+
+  demoRows
+    .filter(demo => isInSelectedRange(demo.date))
+    .forEach(demo => {
+    const row = byDate.get(demo.date) || { date: demo.date };
+
+    Object.entries(demo).forEach(([key, value]) => {
+      if (
+        key !== 'date' &&
+        (row[key] === undefined || row[key] === null)
+      ) {
+        row[key] = value;
+      }
+    });
+
+    byDate.set(demo.date, row);
+    });
+
+  const chartLimit = from || to
+    ? Number.MAX_SAFE_INTEGER
+    : Number.isFinite(Number(getSelectedStatsPeriod()))
+      ? Math.max(1, Number(getSelectedStatsPeriod()))
+      : 365;
+
+  return Array.from(byDate.values())
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-chartLimit);
 }
 
 function renderLevelsChart() {
@@ -1151,14 +1380,17 @@ function renderStatsDashboard() {
 
 const count = periodHistory.length;
 
-const periodSelect =
-  document.getElementById('statsPeriodSelect');
+    const periodSelect =
+      document.getElementById('statsPeriodSelect');
+    const { from, to } = getStatsDateRange();
 
-const periodLabel = periodSelect
-  ? periodSelect.options[
-      periodSelect.selectedIndex
-    ].textContent
-  : 'выбранный период';
+    const periodLabel = from || to
+      ? `${from || 'начало'} — ${to || 'конец'}`
+      : periodSelect
+        ? periodSelect.options[
+            periodSelect.selectedIndex
+          ].textContent
+        : 'выбранный период';
 
 status.textContent = count > 0
   ? `Снимков за период «${periodLabel}»: ${count}. Последний: ${periodHistory[count - 1].date}`

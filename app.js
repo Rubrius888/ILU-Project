@@ -168,6 +168,7 @@ window.printSections = printSections;
 
 // ======================== ПЕРВИЧНЫЙ ЗАПУСК ========================
 restoreSavedFilters();
+restoreInfoCardsState();
 updateDateBar();
 updateInfoCard();
 renderMatrix();

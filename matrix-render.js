@@ -139,6 +139,13 @@ function renderMatrix() {
 
   thead.appendChild(trNames);
 
+  trNames.querySelector('.matrix-cover-column').title =
+    'Покрытие U по посту: количество операторов с уровнем U';
+  trNames.querySelector('.matrix-poly3-column').title =
+    'Поливалентность 3L по посту: количество операторов с уровнем L или U';
+  trNames.querySelector('.matrix-poly2-column').title =
+    'Поливалентность 2L по посту: количество операторов с уровнем L или U';
+
   // ----- ЗАГОЛОВОК 2: СТАТУС И УРОВЕНЬ -----
 
   const trSub = document.createElement('tr');
@@ -183,6 +190,7 @@ function renderMatrix() {
 
     let rowActive = false;
     let rowHasIcr = false;
+    let rowHasQualifiedSupport = false;
 
     for (let c = 0; c < operators.length; c++) {
       if (
@@ -191,16 +199,28 @@ function renderMatrix() {
       ) {
         rowActive = true;
 
-        if (data[r][c] === 'Iкр') {
+        const level = data[r][c];
+
+        if (level === 'Iкр') {
           rowHasIcr = true;
+        }
+
+        if (level === 'L' || level === 'U') {
+          rowHasQualifiedSupport = true;
         }
       }
     }
 
-    if (rowHasIcr) {
-      tr.classList.add('matrix-row-alert-yellow');
-    } else if (!rowActive) {
+    // Iкр без опытного оператора L/U считается критичным постом.
+    // I, Lкр и второй Iкр не закрывают обучение на посту.
+    if (
+      !rowActive ||
+      (rowHasIcr && !rowHasQualifiedSupport)
+    ) {
       tr.classList.add('matrix-row-alert-red');
+    } else if (rowHasIcr) {
+      // Iкр вместе с L или U — пост закрыт, но остаётся учебным.
+      tr.classList.add('matrix-row-alert-yellow');
     }
 
     const postBackground =
@@ -272,7 +292,6 @@ function renderMatrix() {
     tdDays.textContent = trainingDays[r];
     tdDays.className = 'cell';
     tdDays.onclick = () => cycleTrainingDays(r);
-
     tr.appendChild(tdDays);
 
     // ----- ЯЧЕЙКИ ОПЕРАТОРОВ -----
@@ -296,6 +315,10 @@ function renderMatrix() {
         tdPost.innerHTML =
           '<span class="status-marker status-marker-training" aria-label="Обучается"></span>';
       }
+
+      tdPost.title =
+        `Пост: ${postName}\n` +
+        `Оператор: ${operators[c]}`;
 
       // Проверяем давность стояния на посту
       try {
@@ -330,6 +353,9 @@ function renderMatrix() {
       tdLvl.dataset.operatorIndex = c;
       tdLvl.textContent = level || '';
       tdLvl.className = 'cell';
+      tdLvl.title =
+        `Пост: ${postName}\n` +
+        `Оператор: ${operators[c]}`;
 
       if (level === 'Iкр') {
         tdLvl.classList.add('level-I');
@@ -380,6 +406,11 @@ function renderMatrix() {
     }
 
     tdCover.textContent = uCount > 0 ? uCount : '';
+    tdCover.title =
+      `Пост: ${postName}\n` +
+      `Покрытие U: ${uCount} оператор${
+        uCount === 1 ? '' : 'а'
+      }`;
     tdCover.style.fontWeight = '700';
     tdCover.style.textAlign = 'center';
     tdCover.style.verticalAlign = 'middle';
@@ -420,6 +451,9 @@ function renderMatrix() {
       countL3 >= 3
         ? `(${countL3})`
         : '';
+    tdPoly3.title =
+      `Пост: ${postName}\n` +
+      `Операторов с L/U: ${countL3}`;
 
     tdPoly3.style.fontWeight = '700';
     tdPoly3.style.textAlign = 'center';
@@ -443,6 +477,9 @@ function renderMatrix() {
       countL3 >= 2
         ? `(${countL3})`
         : '';
+    tdPoly2.title =
+      `Пост: ${postName}\n` +
+      `Операторов с L/U: ${countL3}`;
 
     tdPoly2.style.fontWeight = '700';
     tdPoly2.style.textAlign = 'center';
@@ -636,6 +673,14 @@ function renderMatrix() {
 
   tbody.appendChild(trFooter);
 
+  const footerSummaryStart = 4 + operators.length;
+  trFooter.cells[footerSummaryStart].title =
+    `Покрытие U по постам: ${percentU}%`;
+  trFooter.cells[footerSummaryStart + 1].title =
+    `Поливалентность 3L по постам: ${percent3L}%`;
+  trFooter.cells[footerSummaryStart + 2].title =
+    `Поливалентность 2L по постам: ${percent2L}%`;
+
   // ----- СТРОКА «ПОЛИВАЛЕНТНОСТЬ 3L» -----
 
   const trPoly3 = document.createElement('tr');
@@ -664,7 +709,9 @@ function renderMatrix() {
       `;
     }).join('') +
 
-    '<td></td>' +
+    `<td style="font-weight:700;font-size:14px;color:#166534;">
+      ${percentOps3L}%
+    </td>` +
 
     `<td style="font-weight:700;font-size:14px;color:#166534;">
       ${total3L}%
@@ -673,6 +720,23 @@ function renderMatrix() {
     '<td></td>';
 
   tbody.appendChild(trPoly3);
+
+  trPoly3
+    .querySelectorAll('[data-operator-index]')
+    .forEach(cell => {
+      const index = Number(cell.dataset.operatorIndex);
+      const count = getOperatorPolyvalence(index);
+      cell.title =
+        `Оператор: ${operators[index]}\n` +
+        `Поливалентность 3L: ${count} пост${
+          count === 1 ? '' : 'ов'
+        } с уровнем L/U`;
+    });
+
+  trPoly3.cells[footerSummaryStart].title =
+    `Поливалентность 3L по операторам: ${percentOps3L}%`;
+  trPoly3.cells[footerSummaryStart + 1].title =
+    `Средняя поливалентность участка 3L: ${total3L}%`;
 
   // ----- СТРОКА «ПОЛИВАЛЕНТНОСТЬ 2L» -----
 
@@ -702,7 +766,9 @@ function renderMatrix() {
       `;
     }).join('') +
 
-    '<td></td>' +
+    `<td style="font-weight:700;font-size:14px;color:#166534;">
+      ${percentOps2L}%
+    </td>` +
     '<td></td>' +
 
     `<td style="font-weight:700;font-size:14px;color:#166534;">
@@ -710,6 +776,23 @@ function renderMatrix() {
     </td>`;
 
   tbody.appendChild(trPoly2);
+
+  trPoly2
+    .querySelectorAll('[data-operator-index]')
+    .forEach(cell => {
+      const index = Number(cell.dataset.operatorIndex);
+      const count = getOperatorPolyvalence(index);
+      cell.title =
+        `Оператор: ${operators[index]}\n` +
+        `Поливалентность 2L: ${count} пост${
+          count === 1 ? '' : 'ов'
+        } с уровнем L/U`;
+    });
+
+  trPoly2.cells[footerSummaryStart].title =
+    `Поливалентность 2L по операторам: ${percentOps2L}%`;
+  trPoly2.cells[footerSummaryStart + 2].title =
+    `Средняя поливалентность участка 2L: ${total2L}%`;
 
   setupMatrixHoverHighlight();
 
