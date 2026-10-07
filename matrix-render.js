@@ -317,8 +317,8 @@ function renderMatrix() {
       }
 
       tdPost.title =
-        `Пост: ${postName}\n` +
-        `Оператор: ${operators[c]}`;
+        `${postName}\n` +
+        `${operators[c]}`;
 
       // Проверяем давность стояния на посту
       try {
@@ -354,8 +354,8 @@ function renderMatrix() {
       tdLvl.textContent = level || '';
       tdLvl.className = 'cell';
       tdLvl.title =
-        `Пост: ${postName}\n` +
-        `Оператор: ${operators[c]}`;
+        `${postName}\n` +
+        `${operators[c]}`;
 
       if (level === 'Iкр') {
         tdLvl.classList.add('level-I');
@@ -407,7 +407,7 @@ function renderMatrix() {
 
     tdCover.textContent = uCount > 0 ? uCount : '';
     tdCover.title =
-      `Пост: ${postName}\n` +
+      `${postName}\n` +
       `Покрытие U: ${uCount} оператор${
         uCount === 1 ? '' : 'а'
       }`;
@@ -452,7 +452,7 @@ function renderMatrix() {
         ? `(${countL3})`
         : '';
     tdPoly3.title =
-      `Пост: ${postName}\n` +
+      `${postName}\n` +
       `Операторов с L/U: ${countL3}`;
 
     tdPoly3.style.fontWeight = '700';
@@ -478,7 +478,7 @@ function renderMatrix() {
         ? `(${countL3})`
         : '';
     tdPoly2.title =
-      `Пост: ${postName}\n` +
+      `${postName}\n` +
       `Операторов с L/U: ${countL3}`;
 
     tdPoly2.style.fontWeight = '700';
@@ -727,7 +727,7 @@ function renderMatrix() {
       const index = Number(cell.dataset.operatorIndex);
       const count = getOperatorPolyvalence(index);
       cell.title =
-        `Оператор: ${operators[index]}\n` +
+        `${operators[index]}\n` +
         `Поливалентность 3L: ${count} пост${
           count === 1 ? '' : 'ов'
         } с уровнем L/U`;
@@ -783,7 +783,7 @@ function renderMatrix() {
       const index = Number(cell.dataset.operatorIndex);
       const count = getOperatorPolyvalence(index);
       cell.title =
-        `Оператор: ${operators[index]}\n` +
+        `${operators[index]}\n` +
         `Поливалентность 2L: ${count} пост${
           count === 1 ? '' : 'ов'
         } с уровнем L/U`;

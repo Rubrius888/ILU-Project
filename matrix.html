@@ -400,7 +400,7 @@
         <input
           id="statsDateFrom"
           type="date"
-          onchange="syncStatsDateRangeInputs()"
+          onblur="syncStatsDateRangeInputs()"
         >
       </label>
 
@@ -410,7 +410,7 @@
         <input
           id="statsDateTo"
           type="date"
-          onchange="syncStatsDateRangeInputs()"
+          onblur="syncStatsDateRangeInputs()"
         >
       </label>
 
@@ -792,9 +792,35 @@
       <div class="add-buttons-top">
         <button
           class="btn-small"
-          onclick="generateDevelopmentPlan()"
+          id="developmentPreviousMonth"
+          type="button"
+          onclick="changeDevelopmentMonth(-1)"
         >
-          Сгенерировать план
+          ← Прошлый месяц
+        </button>
+        <button
+          class="btn-small"
+          id="developmentCurrentMonth"
+          type="button"
+          onclick="showCurrentDevelopmentMonth()"
+        >
+          Текущий месяц
+        </button>
+        <button
+          class="btn-small"
+          id="developmentNextMonth"
+          type="button"
+          onclick="changeDevelopmentMonth(1)"
+        >
+          Следующий месяц →
+        </button>
+        <span id="developmentPlanMonthLabel" style="font-weight:600;color:#334155;text-transform:capitalize;"></span>
+        <button
+          class="btn-small"
+          type="button"
+          onclick="openDevelopmentGenerationDialog()"
+        >
+          Сгенерировать
         </button>
       </div>
 
@@ -806,7 +832,20 @@
       >
         🖨 Печать
       </button>
+
+      <button
+        class="btn-small"
+        type="button"
+        onclick="openDevelopmentSettingsDialog()"
+      >
+        ⚙ Настройки
+      </button>
     </div>
+
+    <div
+      id="developmentPlanStatus"
+      style="display:none;margin:6px 0;padding:8px 10px;border-radius:5px;background:#fff7ed;color:#b45309;font-size:13px;font-weight:600;"
+    ></div>
 
     <div class="matrix-container" style="overflow-x:auto;">
       <table id="devCalendarTable">

@@ -453,8 +453,7 @@ function syncStatsDateRangeInputs() {
     return;
   }
 
-  to.min = from.value || '';
-  from.max = to.value || '';
+  syncDateInputRangeLimits(from, to);
 }
 
 function toggleStatsDateFilter() {
@@ -621,11 +620,14 @@ function renderPolyvalenceChart() {
       return;
     }
 
-    const values = history.map(item =>
-      getMetricValue(item, key)
-    );
+    const chartPoints = history
+      .map(item => ({
+        item,
+        value: getMetricValue(item, key)
+      }))
+      .filter(point => point.value !== null);
 
-    if (!values.some(value => value !== null)) {
+    if (chartPoints.length === 0) {
       container.innerHTML =
         '<div class="stats-chart-empty">' +
         'Данные появятся после следующего снимка.' +
@@ -652,10 +654,10 @@ function renderPolyvalenceChart() {
     const chartHeight = height - top - bottom;
 
     const x = index =>
-      history.length === 1
+      chartPoints.length === 1
         ? left + chartWidth / 2
         : left +
-          (index / (history.length - 1)) *
+          (index / (chartPoints.length - 1)) *
             chartWidth;
 
     const y = value =>
@@ -667,28 +669,20 @@ function renderPolyvalenceChart() {
     let path = '';
     let segment = '';
 
-    values.forEach((value, index) => {
-      if (value === null) {
-        path += segment;
-        segment = '';
-        return;
-      }
-
+    chartPoints.forEach(({ value }, index) => {
       segment += `${segment ? 'L' : 'M'} ` +
         `${x(index).toFixed(1)} ${y(value).toFixed(1)} `;
     });
 
     path += segment;
 
-    const circles = values
-      .map((value, index) => value === null
-        ? ''
-        : `<circle
-            cx="${x(index).toFixed(1)}"
-            cy="${y(value).toFixed(1)}"
-            r="3.5"
-            fill="${color}"
-          ><title>${history[index].date}: ${value}%</title></circle>`
+    const circles = chartPoints
+      .map(({ item, value }, index) => `<circle
+          cx="${x(index).toFixed(1)}"
+          cy="${y(value).toFixed(1)}"
+          r="3.5"
+          fill="${color}"
+        ><title>${item.date}: ${value}%</title></circle>`
       )
       .join('');
 
@@ -713,8 +707,9 @@ function renderPolyvalenceChart() {
       })
       .join('');
 
-    const firstDate = history[0].date.slice(5);
-    const lastDate = history[history.length - 1].date.slice(5);
+    const firstDate = chartPoints[0].item.date.slice(5);
+    const lastDate =
+      chartPoints[chartPoints.length - 1].item.date.slice(5);
 
     container.innerHTML = `
       <svg
@@ -753,111 +748,13 @@ function renderPolyvalenceChart() {
   });
 }
 
-// Для новых раздельных графиков добавляем точки за 04.10 и 05.10,
-// если за эти даты ещё нет соответствующих показателей. Значения берутся
-// из текущего состояния матрицы и используются только при отрисовке графика.
 function getPolyvalenceChartHistory() {
-  const history = getStatsHistoryForPeriod()
+  return getStatsHistoryForPeriod()
+    .filter(item =>
+      item && typeof item.date === 'string'
+    )
     .slice()
     .sort((a, b) => a.date.localeCompare(b.date));
-
-  const year = new Date().getFullYear();
-  const poly = window._polyData || {};
-  const today = history.find(item =>
-    item.date === getStatsDateKey()
-  ) || {};
-
-  const currentValue = (polyKey, snapshotKey, legacyKey) => {
-    const fromMatrix = Number(poly[polyKey]);
-
-    if (Number.isFinite(fromMatrix)) {
-      return getStatsPercent(fromMatrix);
-    }
-
-    const fromSnapshot = Number(today[snapshotKey]);
-
-    if (Number.isFinite(fromSnapshot)) {
-      return getStatsPercent(fromSnapshot);
-    }
-
-    return getStatsPercent(today[legacyKey]);
-  };
-
-  const current = {
-    polyvalenceOperator2L: currentValue(
-      'percentOps2L',
-      'polyvalenceOperator2L'
-    ),
-    polyvalenceOperator3L: currentValue(
-      'percentOps3L',
-      'polyvalenceOperator3L'
-    ),
-    polyvalencePost2L: currentValue(
-      'percent2L',
-      'polyvalencePost2L'
-    ),
-    polyvalencePost3L: currentValue(
-      'percent3L',
-      'polyvalencePost3L'
-    ),
-    polyvalenceAverage2L: currentValue(
-      'total2L',
-      'polyvalenceAverage2L',
-      'polyvalence2L'
-    ),
-    polyvalenceAverage3L: currentValue(
-      'total3L',
-      'polyvalenceAverage3L',
-      'polyvalence3L'
-    )
-  };
-
-  const demoRows = [
-    {
-      date: `${year}-10-04`,
-      ...current
-    },
-    {
-      date: `${year}-10-05`,
-      ...current
-    }
-  ];
-
-  const { from, to } = getStatsDateRange();
-  const isInSelectedRange = date =>
-    (!from || date >= from) &&
-    (!to || date <= to);
-
-  const byDate = new Map(
-    history.map(item => [item.date, { ...item }])
-  );
-
-  demoRows
-    .filter(demo => isInSelectedRange(demo.date))
-    .forEach(demo => {
-    const row = byDate.get(demo.date) || { date: demo.date };
-
-    Object.entries(demo).forEach(([key, value]) => {
-      if (
-        key !== 'date' &&
-        (row[key] === undefined || row[key] === null)
-      ) {
-        row[key] = value;
-      }
-    });
-
-    byDate.set(demo.date, row);
-    });
-
-  const chartLimit = from || to
-    ? Number.MAX_SAFE_INTEGER
-    : Number.isFinite(Number(getSelectedStatsPeriod()))
-      ? Math.max(1, Number(getSelectedStatsPeriod()))
-      : 365;
-
-  return Array.from(byDate.values())
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(-chartLimit);
 }
 
 function renderLevelsChart() {

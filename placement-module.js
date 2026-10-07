@@ -197,18 +197,16 @@ function openPlacementFilterMenu(event, type) {
       padding: 7px;
     `;
 
-    const syncDateRangeLimits = () => {
-      toInput.min = fromInput.value || '';
-      fromInput.max = toInput.value || '';
-    };
+    const syncDateRangeLimits = () =>
+      syncDateInputRangeLimits(fromInput, toInput);
 
     fromInput.addEventListener(
-      'change',
+      'blur',
       syncDateRangeLimits
     );
 
     toInput.addEventListener(
-      'change',
+      'blur',
       syncDateRangeLimits
     );
 

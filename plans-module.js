@@ -3,245 +3,387 @@ function generateDevelopmentPlan() {
   const thead = document.querySelector('#devCalendarTable thead');
   const tbody = document.querySelector('#devCalendarTable tbody');
   if (!thead || !tbody) return;
-
-  // Считаем покрытие L/U для каждого поста (без НУ и СО)
-  const postCoverage = [];
-  for (let r = 0; r < posts.length; r++) {
-    let countLU = 0;
-    for (let c = 0; c < operators.length; c++) {
-      if (
-        operatorRoles[c] === 'НУ' ||
-        operatorRoles[c] === 'СО' ||
-        operatorRoles[c] === 'ДС'
-      ) continue;
-      const lvl = data[r][c];
-      if (lvl === 'L' || lvl === 'U') countLU++;
-    }
-    postCoverage.push({ index: r, name: posts[r], coverage: countLU });
+  const statusElement = document.getElementById('developmentPlanStatus');
+  if (statusElement) {
+    statusElement.textContent = '';
+    statusElement.style.display = 'none';
   }
 
-  // Считаем поливалентность каждого оператора (L/U)
-  const opPoly = [];
+  // Развитие строится только для производственных ролей. △ намеренно
+  // не читается: это организационный маркер, а не признак занятости.
+  const excludedRoles = new Set(['НУ', 'СО', 'ДС']);
+  const isEligibleOperator = index => !excludedRoles.has(operatorRoles[index]);
+  const isLU = level => level === 'L' || level === 'U';
+  const isCandidateLevel = level =>
+    level === 'Lкр' || level === 'I' || level === 'Iкр' ||
+    level === null || level === '' || level === '0' || level === 0;
+  const qualificationPriority = level => {
+    if (level === 'Lкр') return 4;
+    if (level === 'I') return 3;
+    if (level === 'Iкр') return 2;
+    if (level === null || level === '' || level === '0' || level === 0) return 1;
+    return -1;
+  };
+  const replacementPriority = level => {
+    if (level === 'Lкр') return 4;
+    if (level === 'I') return 3;
+    if (level === 'L') return 2;
+    if (level === 'U') return 1;
+    return -1;
+  };
+  const getLevel = (postIndex, opIndex) => data[postIndex]?.[opIndex] ?? null;
+  const getStatus = (postIndex, opIndex) => attendanceData?.[postIndex]?.[opIndex] || '';
+
+  const eligibleOps = [];
   for (let c = 0; c < operators.length; c++) {
-    if (
-      operatorRoles[c] === 'НУ' ||
-      operatorRoles[c] === 'СО' ||
-      operatorRoles[c] === 'ДС'
-    ) continue;
-    let count = 0;
+    if (!isEligibleOperator(c)) continue;
+    let poly = 0;
     for (let r = 0; r < posts.length; r++) {
-      const lvl = data[r][c];
-      if (lvl === 'L' || lvl === 'U') count++;
+      if (isLU(getLevel(r, c))) poly++;
     }
-    opPoly.push({ index: c, name: operators[c], count });
+    eligibleOps.push({ index: c, name: operators[c], count: poly });
   }
 
-  const virtualCoverage = postCoverage.map(p => p.coverage);
+  const postCoverage = posts.map((name, r) => {
+    let coverage = 0;
+    for (const op of eligibleOps) {
+      if (isLU(getLevel(r, op.index))) coverage++;
+    }
+    return { index: r, name, coverage };
+  });
+  const virtualCoverage = postCoverage.map(post => post.coverage);
+  const virtualPoly = new Map(eligibleOps.map(op => [op.index, op.count]));
+  // Для первого развития до L оператор без единого L/U может быть
+  // направлен только на разрешённые сочетания сложности и эргономики.
+  // Значения берутся из массивов difficulty/ergonomics текущего состояния.
+  const firstLAllowedCombinations = new Set([
+    'C|green',
+    'C|yellow',
+    'B|green'
+  ]);
+  const isFirstLEligible = (opIndex, postIndex) => {
+    if ((virtualPoly.get(opIndex) || 0) !== 0) return true;
+    const postDifficulty = String(difficulty?.[postIndex] ?? '').trim().toUpperCase();
+    const postErgonomics = String(ergonomics?.[postIndex] ?? '').trim().toLowerCase();
+    return firstLAllowedCombinations.has(`${postDifficulty}|${postErgonomics}`);
+  };
 
-  // В план развития можно добавлять только операторов,
-  // которым ещё требуется обучение на этом посту.
-  // Lкр уже находится в обучении на L, а L и U уже освоены.
-  function isDevelopmentCandidate(level) {
-    return (
-      level === null ||
-      level === '' ||
-      level === 'I' ||
-      level === 'Iкр'
+  // Виртуальная расстановка нужна только для проверки безопасного снятия.
+  // Реальные attendanceData/data не изменяются.
+  let virtualOccupancy = Array.from({ length: operators.length }, (_, opIndex) => {
+    const occupied = new Set();
+    for (let r = 0; r < posts.length; r++) {
+      if (getStatus(r, opIndex) === '○') occupied.add(r);
+    }
+    return occupied;
+  });
+  const cloneOccupancy = occupancy => occupancy.map(set => new Set(set));
+  const usedOps = new Set();
+  const lockedPosts = new Set();
+  const planAssignments = [];
+
+  function isFree(opIndex, occupancy = virtualOccupancy) {
+    return occupancy[opIndex]?.size === 0;
+  }
+
+  function applyMove(occupancy, opIndex, fromPost, toPost) {
+    if (fromPost !== null && fromPost !== undefined) occupancy[opIndex].delete(fromPost);
+    occupancy[opIndex].add(toPost);
+  }
+
+  // Закрывает post после снятия blockedOp. Если единственный L/U уходит,
+  // ищется полноценная цепочка замещения до свободного оператора.
+  function closeOccupiedPost(postIndex, blockedOp, occupancy, visitedOps, visitedPosts) {
+    if (visitedPosts.has(postIndex) || visitedOps.has(blockedOp)) return null;
+    visitedPosts.add(postIndex);
+    visitedOps.add(blockedOp);
+
+    const blockedLevel = getLevel(postIndex, blockedOp);
+    if (!isLU(blockedLevel) || virtualCoverage[postIndex] - 1 >= 1) {
+      occupancy[blockedOp].delete(postIndex);
+      return occupancy;
+    }
+
+    const replacements = eligibleOps
+      .filter(op => op.index !== blockedOp && !usedOps.has(op.index))
+      .map(op => ({
+        ...op,
+        level: getLevel(postIndex, op.index),
+        occupied: occupancy[op.index]?.size > 0
+      }))
+      .filter(op => replacementPriority(op.level) > 0)
+      .sort((a, b) => {
+        const levelDiff = replacementPriority(b.level) - replacementPriority(a.level);
+        if (levelDiff) return levelDiff;
+        if (a.occupied !== b.occupied) return a.occupied ? 1 : -1;
+        if (a.count !== b.count) return a.count - b.count;
+        return a.index - b.index;
+      });
+
+    for (const replacement of replacements) {
+      const nextOccupancy = cloneOccupancy(occupancy);
+      const nextVisitedOps = new Set(visitedOps);
+      const nextVisitedPosts = new Set(visitedPosts);
+      const occupiedPosts = [...(nextOccupancy[replacement.index] || [])];
+      if (occupiedPosts.includes(postIndex)) continue;
+
+      let valid = true;
+      for (const sourcePost of occupiedPosts) {
+        const closed = closeOccupiedPost(
+          sourcePost,
+          replacement.index,
+          nextOccupancy,
+          nextVisitedOps,
+          nextVisitedPosts
+        );
+        if (!closed) {
+          valid = false;
+          break;
+        }
+      }
+      if (!valid) continue;
+
+      const sourceAfterRelease = [...(nextOccupancy[replacement.index] || [])][0];
+      applyMove(nextOccupancy, replacement.index, sourceAfterRelease ?? null, postIndex);
+      nextOccupancy[blockedOp].delete(postIndex);
+      return nextOccupancy;
+    }
+    return null;
+  }
+
+  function releaseForTraining(opIndex, targetPost) {
+    const nextOccupancy = cloneOccupancy(virtualOccupancy);
+    const occupiedPosts = [...(nextOccupancy[opIndex] || [])]
+      .filter(postIndex => postIndex !== targetPost);
+    for (const sourcePost of occupiedPosts) {
+      const closed = closeOccupiedPost(
+        sourcePost,
+        opIndex,
+        nextOccupancy,
+        new Set(),
+        new Set()
+      );
+      if (!closed) return null;
+    }
+    nextOccupancy[opIndex].delete(targetPost);
+    return nextOccupancy;
+  }
+
+  function addAssignment(postIndex, opIndex, stage, releaseState, allowLocked = false) {
+    if (usedOps.has(opIndex) || (lockedPosts.has(postIndex) && !allowLocked)) return false;
+    const nextOccupancy = releaseState || releaseForTraining(opIndex, postIndex);
+    if (!nextOccupancy) return false;
+    virtualOccupancy = nextOccupancy;
+    usedOps.add(opIndex);
+    virtualCoverage[postIndex]++;
+    virtualPoly.set(opIndex, (virtualPoly.get(opIndex) || 0) + 1);
+    planAssignments.push({
+      postIndex,
+      opIndex,
+      stage,
+      sourceLevel: getLevel(postIndex, opIndex)
+    });
+    return true;
+  }
+
+  function candidatesForPost(postIndex) {
+    return eligibleOps
+      .filter(op => !usedOps.has(op.index))
+      .map(op => ({
+        ...op,
+        level: getLevel(postIndex, op.index),
+        free: isFree(op.index),
+        releaseState: releaseForTraining(op.index, postIndex)
+      }))
+      .filter(candidate =>
+        !lockedPosts.has(postIndex) &&
+        isCandidateLevel(candidate.level) &&
+        isFirstLEligible(candidate.index, postIndex) &&
+        candidate.releaseState
+      )
+      .sort((a, b) => {
+        const qualification = qualificationPriority(b.level) - qualificationPriority(a.level);
+        if (qualification) return qualification;
+        if (a.free !== b.free) return a.free ? -1 : 1;
+        const poly = (virtualPoly.get(a.index) || 0) - (virtualPoly.get(b.index) || 0);
+        if (poly) return poly;
+        return a.index - b.index;
+      });
+  }
+
+  // Lкр + ○ на этом же посту — уже начатое обучение, его нужно закончить,
+  // а пост до следующей генерации блокируется для новых кандидатов.
+  for (const post of postCoverage) {
+    const continuation = eligibleOps.find(op =>
+      getLevel(post.index, op.index) === 'Lкр' &&
+      getStatus(post.index, op.index) === '○'
+    );
+    if (!continuation) continue;
+    lockedPosts.add(post.index);
+    if (!usedOps.has(continuation.index)) {
+      addAssignment(
+        post.index,
+        continuation.index,
+        'Завершение Lкр',
+        releaseForTraining(continuation.index, post.index),
+        true
+      );
+    }
+  }
+
+  // Состояние после обязательных continuation-записей. Оно используется
+  // только для отката phantom-назначений после календарного STOP.
+  const baseVirtualCoverage = [...virtualCoverage];
+  const baseVirtualPoly = new Map(virtualPoly);
+  const baseVirtualOccupancy = cloneOccupancy(virtualOccupancy);
+  const baseUsedOps = new Set(usedOps);
+  const basePlanAssignmentCount = planAssignments.length;
+
+  function developPostsTo(targetLevel) {
+    const postsToDevelop = postCoverage
+      .filter(post => virtualCoverage[post.index] < targetLevel && !lockedPosts.has(post.index))
+      .sort((a, b) => {
+        const coverageDiff = virtualCoverage[a.index] - virtualCoverage[b.index];
+        return coverageDiff || a.index - b.index;
+      });
+
+    for (const post of postsToDevelop) {
+      while (virtualCoverage[post.index] < targetLevel && !lockedPosts.has(post.index)) {
+        const candidate = candidatesForPost(post.index)[0];
+        if (!candidate) break;
+        if (!addAssignment(post.index, candidate.index, `Посты ${targetLevel}L`, candidate.releaseState)) break;
+      }
+    }
+  }
+
+  function operatorOptions(op, postDemand) {
+    return postCoverage
+      .filter(post => !lockedPosts.has(post.index))
+      .map(post => ({
+        post,
+        level: getLevel(post.index, op.index),
+        free: isFree(op.index),
+        releaseState: releaseForTraining(op.index, post.index),
+        rarity: postDemand[post.index] || 0
+      }))
+      .filter(option => isCandidateLevel(option.level) && option.releaseState)
+      .filter(option => isFirstLEligible(op.index, option.post.index))
+      .map(option => ({ ...option }));
+  }
+
+  function developOperatorsTo(targetLevel) {
+    // Одна минимальная feasible poly-группа за раз. Уже использованные
+    // операторы исключаются до определения группы: второе назначение
+    // в этой генерации для них запрещено.
+    while (true) {
+      const available = eligibleOps
+        .filter(op =>
+          !usedOps.has(op.index) &&
+          (virtualPoly.get(op.index) || 0) < targetLevel &&
+          canStillDevelop(op)
+        );
+      if (!available.length) break;
+
+      const currentPoly = Math.min(
+        ...available.map(op => virtualPoly.get(op.index) || 0)
+      );
+      const group = new Set(
+        available
+          .filter(op => (virtualPoly.get(op.index) || 0) === currentPoly)
+          .map(op => op.index)
+      );
+
+      while (group.size) {
+        const postDemand = {};
+        for (const post of postCoverage) {
+          postDemand[post.index] = [...group].filter(opIndex =>
+            !lockedPosts.has(post.index) &&
+            isCandidateLevel(getLevel(post.index, opIndex)) &&
+            isFirstLEligible(opIndex, post.index)
+          ).length;
+        }
+
+        const possible = [...group]
+          .map(opIndex => eligibleOps.find(op => op.index === opIndex))
+          .map(op => ({ op, options: operatorOptions(op, postDemand) }))
+          .filter(item => item.options.length > 0)
+          .sort((a, b) => {
+            const scarcity = a.options.length - b.options.length;
+            return scarcity || a.op.index - b.op.index;
+          });
+
+        // Все оставшиеся операторы группы без feasible-поста исчерпаны.
+        if (!possible.length) break;
+
+        const selected = possible[0];
+        const options = selected.options.sort((a, b) => {
+          const qualification = qualificationPriority(b.level) - qualificationPriority(a.level);
+          if (qualification) return qualification;
+          if (a.free !== b.free) return a.free ? -1 : 1;
+          const rarity = a.rarity - b.rarity;
+          if (rarity) return rarity;
+          const coverageDiff = virtualCoverage[a.post.index] - virtualCoverage[b.post.index];
+          return coverageDiff || a.post.index - b.post.index;
+        });
+        const option = options[0];
+        group.delete(selected.op.index);
+        addAssignment(
+          option.post.index,
+          selected.op.index,
+          `Операторы ${targetLevel}L`,
+          option.releaseState
+        );
+      }
+    }
+  }
+
+  function canStillDevelop(op) {
+    if (usedOps.has(op.index)) return false;
+    return postCoverage.some(post =>
+      !lockedPosts.has(post.index) &&
+      isCandidateLevel(getLevel(post.index, op.index)) &&
+      isFirstLEligible(op.index, post.index) &&
+      releaseForTraining(op.index, post.index)
     );
   }
 
-  function findBestPost(opIndex) {
-    const quickPosts = [];
-    const otherPosts = [];
-    for (const p of postCoverage) {
-      const lvl = data[p.index][opIndex];
-      if (lvl === 'I' || lvl === 'Iкр') quickPosts.push(p);
-      else if (isDevelopmentCandidate(lvl)) otherPosts.push(p);
-    }
-    quickPosts.sort((a, b) => virtualCoverage[a.index] - virtualCoverage[b.index]);
-    otherPosts.sort((a, b) => virtualCoverage[a.index] - virtualCoverage[b.index]);
-    return quickPosts[0] || otherPosts[0] || null;
+  // Динамическая лестница: посты N → операторы N → посты N+1 ...
+  // Она ограничена только фактическими кандидатами и физическим потолком.
+  let level = 2;
+  const maximumIterations = Math.max(posts.length, eligibleOps.length) + 2;
+  for (let iteration = 0; iteration < maximumIterations; iteration++) {
+    developPostsTo(level);
+    developOperatorsTo(level);
+
+    const blockedOperators = eligibleOps.some(op =>
+      (virtualPoly.get(op.index) || 0) < level &&
+      canStillDevelop(op)
+    );
+    if (blockedOperators) break;
+
+    const possibleNextStep = eligibleOps.some(op => canStillDevelop(op)) ||
+      postCoverage.some(post => !lockedPosts.has(post.index) && virtualCoverage[post.index] < level + 1);
+    if (!possibleNextStep) break;
+    level++;
   }
 
-  // Собираем все назначения в массив {postIndex, opIndex}
-  const planAssignments = [];
-
-  // Этап 1: 2L по постам
-  const postsNeed2L = postCoverage.filter(p => virtualCoverage[p.index] < 2);
-  if (postsNeed2L.length > 0) {
-    const usedOps = new Set();
-    const sortedPosts = [...postsNeed2L].sort((a, b) => virtualCoverage[a.index] - virtualCoverage[b.index]);
-    for (const p of sortedPosts) {
-      let bestOp = null;
-      const sortedOps = [...opPoly].sort((a, b) => a.count - b.count);
-      for (const o of sortedOps) {
-        if (usedOps.has(o.index)) continue;
-        const lvl = data[p.index][o.index];
-        if (isDevelopmentCandidate(lvl)) { bestOp = o; usedOps.add(o.index); break; }
-      }
-      if (!bestOp) {
-        for (const o of sortedOps) {
-          if (usedOps.has(o.index)) continue;
-          const lvl = data[p.index][o.index];
-          if (!isDevelopmentCandidate(lvl)) continue;
-          bestOp = o; usedOps.add(o.index); break;
-        }
-      }
-      if (bestOp) {
-        virtualCoverage[p.index]++;
-        planAssignments.push({ postIndex: p.index, opIndex: bestOp.index, stage: '2L посты' });
-      }
-    }
-  }
-
-  // Этап 2: 2L по операторам
-  if (planAssignments.length === 0) {
-    const opsNeed2L = opPoly.filter(o => o.count < 2);
-    if (opsNeed2L.length > 0) {
-      for (const o of opsNeed2L) {
-        const bestPost = findBestPost(o.index);
-        if (bestPost) {
-          virtualCoverage[bestPost.index]++;
-          planAssignments.push({ postIndex: bestPost.index, opIndex: o.index, stage: '2L операторы' });
-        }
-      }
-    }
-  }
-
-  // Этап 3: 3L по постам
-  if (planAssignments.length === 0) {
-    const postsNeed3L = postCoverage.filter(p => virtualCoverage[p.index] < 3);
-    if (postsNeed3L.length > 0) {
-      const usedOps = new Set();
-      const sortedPosts = [...postsNeed3L].sort((a, b) => virtualCoverage[a.index] - virtualCoverage[b.index]);
-      for (const p of sortedPosts) {
-        let bestOp = null;
-        const sortedOps = [...opPoly].sort((a, b) => a.count - b.count);
-        for (const o of sortedOps) {
-          if (usedOps.has(o.index)) continue;
-          const lvl = data[p.index][o.index];
-          if (isDevelopmentCandidate(lvl)) { bestOp = o; usedOps.add(o.index); break; }
-        }
-        if (!bestOp) {
-          for (const o of sortedOps) {
-            if (usedOps.has(o.index)) continue;
-            const lvl = data[p.index][o.index];
-            if (!isDevelopmentCandidate(lvl)) continue;
-            bestOp = o; usedOps.add(o.index); break;
-          }
-        }
-        if (bestOp) {
-          virtualCoverage[p.index]++;
-          planAssignments.push({ postIndex: p.index, opIndex: bestOp.index, stage: '3L посты' });
-        }
-      }
-    }
-  }
-
-  // Этап 4: дальнейшее развитие поливалентности операторов
-//
-// Этот этап запускается только после того, как предыдущие этапы
-// не создали назначений. То есть приоритет дефицита покрытия постов
-// до 2L / 3L сохраняется.
-//
-// Логика:
-// 1. Сначала берём операторов с минимальной поливалентностью.
-// 2. Для каждого оператора сначала стараемся продолжить уже
-//    начатое освоение I / Iкр.
-// 3. Если таких постов нет — выбираем новый доступный пост.
-// 4. Среди подходящих постов выбираем пост с минимальным
-//    текущим/виртуальным покрытием L/U.
-// 5. За одну генерацию оператор получает только одно новое обучение.
-
-if (planAssignments.length === 0) {
-  const sortedOps = [...opPoly].sort((a, b) => {
-    if (a.count !== b.count) {
-      return a.count - b.count;
-    }
-
-    return a.index - b.index;
-  });
-
-  const usedOps = new Set();
-
-  for (const o of sortedOps) {
-    if (usedOps.has(o.index)) continue;
-
-    const quickPosts = [];
-    const otherPosts = [];
-
-    for (const p of postCoverage) {
-      const lvl = data[p.index][o.index];
-
-      if (lvl === 'I' || lvl === 'Iкр') {
-        quickPosts.push(p);
-      } else if (
-        lvl === null ||
-        lvl === ''
-      ) {
-        otherPosts.push(p);
-      }
-    }
-
-    quickPosts.sort((a, b) => {
-      const coverageDiff =
-        virtualCoverage[a.index] -
-        virtualCoverage[b.index];
-
-      if (coverageDiff !== 0) {
-        return coverageDiff;
-      }
-
-      return a.index - b.index;
-    });
-
-    otherPosts.sort((a, b) => {
-      const coverageDiff =
-        virtualCoverage[a.index] -
-        virtualCoverage[b.index];
-
-      if (coverageDiff !== 0) {
-        return coverageDiff;
-      }
-
-      return a.index - b.index;
-    });
-
-    const bestPost =
-      quickPosts[0] ||
-      otherPosts[0] ||
-      null;
-
-    if (!bestPost) {
-      continue;
-    }
-
-    virtualCoverage[bestPost.index]++;
-
-    planAssignments.push({
-      postIndex: bestPost.index,
-      opIndex: o.index,
-      stage: 'Развитие поливалентности'
-    });
-
-    usedOps.add(o.index);
-  }
-}
-
-  // Если ничего не назначено — участок укомплектован
+  // Если логических назначений нет, это действительно означает отсутствие
+  // допустимого развития, а не только отсутствие свободной календарной ячейки.
   if (planAssignments.length === 0) {
     tbody.innerHTML = '<tr><td style="text-align:center;color:#16a34a;padding:40px;">✅ Участок полностью укомплектован</td></tr>';
     thead.innerHTML = '';
     return;
   }
 
-  // Определяем срок обучения для каждого назначения
+  // Определяем срок обучения для каждого назначения.
+  // Несколько назначений на один пост допустимы: календарь разместит их
+  // последовательно, не допуская пересечения.
   const planWithDays = planAssignments.map(a => {
-    const lvl = data[a.postIndex][a.opIndex];
-    let days = 10;
-    if (lvl === 'Iкр' || lvl === null || lvl === '') {
-      days = trainingDays[a.postIndex];
-    }
+    const lvl = getLevel(a.postIndex, a.opIndex);
+    const configuredDays = Number(trainingDays[a.postIndex]);
+    const days = (lvl === 'Iкр' || lvl === null || lvl === '' || lvl === '0' || lvl === 0)
+      ? (Number.isInteger(configuredDays) && configuredDays > 0 ? configuredDays : 1)
+      : 10;
     return { ...a, days };
   });
 
@@ -254,8 +396,16 @@ if (planAssignments.length === 0) {
     return 0;
   });
 
-  // Строим календарь на текущий месяц
-  const now = new Date();
+  // Строим календарь выбранного месяца. По умолчанию это текущий месяц;
+  // просмотр истории задаёт window.developmentPlanViewDate.
+  const selectedPlanDate = window.developmentPlanViewDate instanceof Date
+    ? window.developmentPlanViewDate
+    : new Date();
+  const now = new Date(
+    selectedPlanDate.getFullYear(),
+    selectedPlanDate.getMonth(),
+    1
+  );
   const year = now.getFullYear();
   const month = now.getMonth();
   window.daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -271,28 +421,118 @@ if (planAssignments.length === 0) {
   headerHTML += '<th>Срок</th></tr>';
   thead.innerHTML = headerHTML;
 
-  // Распределяем по будням (не более 2 обучений в день)
+  const maxConcurrentTrainings = Math.max(
+    1,
+    Number.parseInt(window.developmentSettings?.maxConcurrentTrainings, 10) || 2
+  );
+
+  // Распределяем по будням с заданным лимитом. Первое
+  // неполностью размещаемое назначение останавливает месячный план.
   const schedule = {};
   const dailyCount = {};
+  const acceptedAssignments = [];
+  const generatedLogicalCount = planAssignments.length;
+  let generationStoppedByCalendar = false;
+  let stopReason = null;
 
   for (const assign of planWithDays) {
     const opName = operators[assign.opIndex];
-    let daysPlaced = 0;
-    for (let d = 0; d < daysInMonth && daysPlaced < assign.days; d++) {
+    const selectedDays = [];
+    for (let d = 0; d < daysInMonth && selectedDays.length < assign.days; d++) {
       const dayOfWeek = new Date(year, month, d + 1).getDay();
       if (dayOfWeek === 0 || dayOfWeek === 6) continue;
-      if ((dailyCount[d] || 0) >= 2) continue;
+      if ((dailyCount[d] || 0) >= maxConcurrentTrainings) continue;
       let busy = false;
       for (const key in schedule) {
-        if (schedule[key][d] === opName) { busy = true; break; }
+        if (schedule[key]?.[d] === opName) { busy = true; break; }
       }
       if (busy) continue;
       if (schedule[assign.postIndex] && schedule[assign.postIndex][d]) continue;
+      selectedDays.push(d);
+    }
+
+    if (selectedDays.length !== assign.days) {
+      generationStoppedByCalendar = true;
+      stopReason = {
+        operator: opName,
+        post: posts[assign.postIndex],
+        requiredDays: assign.days,
+        availableDays: selectedDays.length,
+        year,
+        month
+      };
+      break;
+    }
+    if (!schedule[assign.postIndex]) schedule[assign.postIndex] = {};
+    for (const d of selectedDays) {
       if (!schedule[assign.postIndex]) schedule[assign.postIndex] = {};
       schedule[assign.postIndex][d] = opName;
       dailyCount[d] = (dailyCount[d] || 0) + 1;
-      daysPlaced++;
     }
+    acceptedAssignments.push(assign);
+  }
+
+  window.lastDevelopmentGenerationMeta = {
+    year,
+    month,
+    generationStatus: generationStoppedByCalendar
+      ? 'calendar-capacity-reached'
+      : 'completed',
+    stopReason,
+    generationSettings: { maxConcurrentTrainings },
+    acceptedCount: acceptedAssignments.length,
+    logicalCount: generatedLogicalCount
+  };
+
+  // После календарного STOP итоговый logical list содержит только уже
+  // принятые назначения. Невыполнимое и все последующие назначения не
+  // попадают ни в snapshot, ни в дальнейшее ручное редактирование плана.
+  if (generationStoppedByCalendar) {
+    const committedKeys = new Set(
+      acceptedAssignments.map(a => `${a.postIndex}:${a.opIndex}`)
+    );
+    virtualCoverage.splice(0, virtualCoverage.length, ...baseVirtualCoverage);
+    virtualPoly.clear();
+    baseVirtualPoly.forEach((value, key) => virtualPoly.set(key, value));
+    virtualOccupancy = cloneOccupancy(baseVirtualOccupancy);
+    usedOps.clear();
+    baseUsedOps.forEach(index => usedOps.add(index));
+
+    // Восстанавливаем virtual state только для реально принятых
+    // назначений, созданных после обязательных continuation-записей.
+    const committedGenerated = planAssignments
+      .slice(basePlanAssignmentCount)
+      .filter(a => committedKeys.has(`${a.postIndex}:${a.opIndex}`));
+    for (const assignment of committedGenerated) {
+      const nextOccupancy = releaseForTraining(
+        assignment.opIndex,
+        assignment.postIndex
+      );
+      if (!nextOccupancy) continue;
+      virtualOccupancy = nextOccupancy;
+      usedOps.add(assignment.opIndex);
+      virtualCoverage[assignment.postIndex]++;
+      virtualPoly.set(
+        assignment.opIndex,
+        (virtualPoly.get(assignment.opIndex) || 0) + 1
+      );
+    }
+
+    planAssignments.splice(
+      0,
+      planAssignments.length,
+      ...acceptedAssignments.map(({ selectedDays, ...assignment }) => assignment)
+    );
+  }
+
+  if (acceptedAssignments.length === 0) {
+    thead.innerHTML = '';
+    tbody.innerHTML = '<tr><td style="text-align:center;color:#b45309;padding:40px;">План не удалось полностью разместить в календаре. Подробности доступны в настройках.</td></tr>';
+    if (statusElement) {
+      statusElement.textContent = 'План развития сформирован до доступной календарной ёмкости.';
+      statusElement.style.display = 'block';
+    }
+    return;
   }
 
   // Тело таблицы
@@ -304,20 +544,25 @@ if (planAssignments.length === 0) {
       bodyHTML += `<td style="font-size:11px;">${op}</td>`;
     }
     let postDays = '';
-    for (const assign of planAssignments) {
+    for (const assign of acceptedAssignments) {
       if (assign.postIndex === p.index) {
-        const lvl = data[p.index][assign.opIndex];
-        if (lvl === 'Iкр' || lvl === null || lvl === '') {
-          postDays = trainingDays[p.index];
-        } else {
-          postDays = 10;
-        }
-        break;
+        const lvl = getLevel(p.index, assign.opIndex);
+        const days = (lvl === 'Iкр' || lvl === null || lvl === '' || lvl === '0' || lvl === 0)
+          ? trainingDays[p.index]
+          : 10;
+        postDays = postDays ? `${postDays} / ${days}` : String(days);
       }
     }
     bodyHTML += `<td style="font-weight:600;">${postDays}</td></tr>`;
   }
   tbody.innerHTML = bodyHTML;
+
+  if (statusElement) {
+    statusElement.textContent = generationStoppedByCalendar
+      ? 'План развития сформирован до доступной календарной ёмкости.'
+      : '';
+    statusElement.style.display = statusElement.textContent ? 'block' : 'none';
+  }
 
   // Закрашиваем выходные
   const allCells = tbody.querySelectorAll('td');
@@ -343,9 +588,6 @@ if (planAssignments.length === 0) {
   });
 
   // Вешаем обработчики на ячейки
-  const allTd = tbody.querySelectorAll('td');
-    allTd.forEach(td => {
-    // Проходим по строкам и ячейкам, зная правильные индексы
   const rows = tbody.querySelectorAll('tr');
   rows.forEach((row, r) => {
     const cells = row.querySelectorAll('td');
@@ -385,7 +627,6 @@ if (planAssignments.length === 0) {
         td.onclick = function(e) { addCalendarTraining(e); };
       }
     });
-  });
   });
 }
 

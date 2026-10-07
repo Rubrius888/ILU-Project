@@ -1,3 +1,5 @@
+const MANUAL_TRAINING_LEVELS = ['Iкр', 'Lкр'];
+
 function formatDateForInput(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -152,28 +154,20 @@ function openTrainingRecordForm(options = {}) {
 
   [
     ['Iкр', 'Iкр — обучается на I'],
-    ['I', 'I — новичок'],
-    ['Lкр', 'Lкр — обучается на L'],
-    ['L', 'L — опытный'],
-    ['U', 'U — мастер-форматор']
+    ['Lкр', 'Lкр — обучается на L']
   ].forEach(([value, text]) => {
     levelSelect.appendChild(
       createTrainingOption(value, text)
     );
   });
 
-  levelSelect.value = automatic
-    ? (
-        ['Iкр', 'Lкр'].includes(
-          data[initialRow]?.[initialCol]
-        )
-          ? data[initialRow][initialCol]
-          : 'Iкр'
-      )
-    : (
-        data[initialRow]?.[initialCol] ||
-        'Iкр'
-      );
+  const initialMatrixLevel =
+    data[initialRow]?.[initialCol];
+
+  levelSelect.value =
+    MANUAL_TRAINING_LEVELS.includes(initialMatrixLevel)
+      ? initialMatrixLevel
+      : 'Iкр';
 
   levelSelect.disabled = automatic;
   applyFieldStyle(levelSelect);
@@ -249,14 +243,18 @@ function openTrainingRecordForm(options = {}) {
   }
 
   function updateDefaultEndDate() {
+    if (!isCompleteDateInputValue(startInput.value)) {
+      return;
+    }
+
     const postIndex = getSelectedPostIndex();
 
     const duration =
       parseInt(trainingDays[postIndex], 10) || 1;
 
-    const startDate = startInput.value
-      ? new Date(`${startInput.value}T00:00:00`)
-      : new Date();
+    const startDate = new Date(
+      `${startInput.value}T00:00:00`
+    );
 
     const calculatedEndDate = new Date(startDate);
 
@@ -267,8 +265,7 @@ function openTrainingRecordForm(options = {}) {
     endInput.value =
       formatDateForInput(calculatedEndDate);
 
-    endInput.min = startInput.value || '';
-    startInput.max = endInput.value || '';
+    syncDateInputRangeLimits(startInput, endInput);
   }
 
   function updateFormatorList() {
@@ -337,13 +334,9 @@ function openTrainingRecordForm(options = {}) {
     const matrixLevel =
       data[postIndex]?.[operatorIndex];
 
-    levelSelect.value = [
-      'Iкр',
-      'I',
-      'Lкр',
-      'L',
-      'U'
-    ].includes(matrixLevel)
+    levelSelect.value = MANUAL_TRAINING_LEVELS.includes(
+      matrixLevel
+    )
       ? matrixLevel
       : 'Iкр';
   }
@@ -363,14 +356,14 @@ function openTrainingRecordForm(options = {}) {
   );
 
   startInput.addEventListener(
-    'change',
+    'blur',
     updateDefaultEndDate
   );
 
-  endInput.addEventListener('change', () => {
-    endInput.min = startInput.value || '';
-    startInput.max = endInput.value || '';
-  });
+  endInput.addEventListener(
+    'blur',
+    () => syncDateInputRangeLimits(startInput, endInput)
+  );
 
   updateFormatorList();
   updateDefaultEndDate();
@@ -447,6 +440,15 @@ function openTrainingRecordForm(options = {}) {
       return;
     }
 
+    const selectedLevel = levelSelect.value;
+
+    if (!MANUAL_TRAINING_LEVELS.includes(selectedLevel)) {
+      alert(
+        'Для создания обучения доступны только уровни Iкр и Lкр.'
+      );
+      return;
+    }
+
     if (!startInput.value || !endInput.value) {
       alert(
         'Выберите даты начала и окончания обучения.'
@@ -492,7 +494,7 @@ function openTrainingRecordForm(options = {}) {
     // Переносим выбранный перспективный уровень
     // в матрицу ILU.
     data[postIndex][operatorIndex] =
-      levelSelect.value;
+      selectedLevel;
 
     // Для автоматического обучения через △
     if (automatic) {
@@ -515,7 +517,7 @@ function openTrainingRecordForm(options = {}) {
 
       post: selectedPost,
       op: selectedOperator,
-      level: levelSelect.value,
+      level: selectedLevel,
       status: statusSelect.value,
       formator,
 
@@ -1047,18 +1049,16 @@ function openTrainingFilterMenu(event, type) {
       padding: 7px;
     `;
 
-    const syncDateRangeLimits = () => {
-      toInput.min = fromInput.value || '';
-      fromInput.max = toInput.value || '';
-    };
+    const syncDateRangeLimits = () =>
+      syncDateInputRangeLimits(fromInput, toInput);
 
     fromInput.addEventListener(
-      'change',
+      'blur',
       syncDateRangeLimits
     );
 
     toInput.addEventListener(
-      'change',
+      'blur',
       syncDateRangeLimits
     );
 
