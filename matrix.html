@@ -889,30 +889,55 @@
     </div>
   </div>
 
-  <div id="placementLog" class="tab-content">
-    <div class="matrix-container" style="overflow-x:auto;">
-      <table id="placementLogTable">
-        <thead>
-          <tr>
-            <th>Дата</th>
-            <th>Оператор</th>
-            <th>Пост</th>
-          </tr>
-        </thead>
+<div id="placementLog" class="tab-content">
+  <div class="section-toolbar placement-log-toolbar">
+    <h3 style="margin:0;color:#0f172a;">
+      Журнал расстановки операторов
+    </h3>
 
-        <tbody>
-          <tr>
-            <td
-              colspan="3"
-              style="text-align:center;color:#94a3b8;padding:40px;"
-            >
-              Журнал пуст. Поставьте оператора на пост в Матрице ILU.
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <button
+      class="btn-small print-button"
+      type="button"
+      onclick="printPlacementLog()"
+      title="Печать журнала расстановки"
+    >
+      🖨 Печать
+    </button>
   </div>
+
+  <div id="placementPrintHeader" class="placement-print-header">
+    <h1>Журнал расстановки операторов</h1>
+    <div id="placementPrintPeriod">
+      Выбранный период: все даты
+    </div>
+    <div id="placementPrintGenerated"></div>
+  </div>
+
+  <div class="matrix-container" style="overflow-x:auto;">
+    <table id="placementLogTable">
+      <thead>
+        <tr>
+          <th>Дата</th>
+          <th>Оператор</th>
+          <th>Пост</th>
+          <th>Причина перестановки</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        <tr>
+          <td
+            colspan="4"
+            style="text-align:center;color:#94a3b8;padding:40px;"
+          >
+            Журнал пуст. Поставьте оператора на пост в Матрице ILU.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+</div>
 
 </div>
 

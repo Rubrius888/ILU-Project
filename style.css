@@ -1481,6 +1481,86 @@ body {
 }
 
 /* Печать выполняется средствами браузера в альбомной ориентации. */
+/* Журнал расстановки */
+.placement-print-header {
+  display: none;
+}
+
+.placement-reason-cell {
+  min-width: 190px;
+  text-align: center;
+}
+
+.placement-reason-layout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.placement-reason-content {
+  min-width: 0;
+  text-align: left;
+}
+
+.placement-reason-badge {
+  display: inline-block;
+  max-width: 100%;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.25;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.placement-reason-rotation {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.placement-reason-replacement {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.placement-reason-sick {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.placement-reason-other {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.placement-reason-unknown {
+  background: #e5e7eb;
+  color: #4b5563;
+}
+
+.placement-comment {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.placement-delete-button {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  color: #b91c1c;
+}
+
 @media print {
   @page {
     size: A4 landscape;
@@ -1570,6 +1650,85 @@ body {
   body.is-printing .export-buttons,
   body.is-printing #emptyMatrixState {
     display: none !important;
+  }
+
+  body.is-printing #placementLog .placement-print-header {
+    display: block !important;
+    margin: 0 0 8px !important;
+    color: #0f172a !important;
+  }
+
+  body.is-printing #placementLog .placement-print-header h1 {
+    margin: 0 0 4px !important;
+    font-size: 18px !important;
+  }
+
+  body.is-printing #placementLog .placement-print-header div {
+    font-size: 10px !important;
+    color: #334155 !important;
+  }
+
+  body.is-printing #placementLog .matrix-container {
+    overflow: visible !important;
+    width: 100% !important;
+  }
+
+  body.is-printing #placementLogTable {
+    width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    font-size: 10px !important;
+  }
+
+  body.is-printing #placementLogTable thead {
+    display: table-header-group !important;
+  }
+
+  body.is-printing #placementLogTable th button {
+    display: none !important;
+  }
+
+  body.is-printing #placementLogTable th,
+  body.is-printing #placementLogTable td {
+    padding: 5px !important;
+    border: 1px solid #64748b !important;
+    color: #0f172a !important;
+    vertical-align: top !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  body.is-printing #placementLogTable th:nth-child(1),
+  body.is-printing #placementLogTable td:nth-child(1) {
+    width: 12% !important;
+  }
+
+  body.is-printing #placementLogTable th:nth-child(2),
+  body.is-printing #placementLogTable td:nth-child(2) {
+    width: 17% !important;
+  }
+
+  body.is-printing #placementLogTable th:nth-child(3),
+  body.is-printing #placementLogTable td:nth-child(3) {
+    width: 31% !important;
+  }
+
+  body.is-printing #placementLogTable th:nth-child(4),
+  body.is-printing #placementLogTable td:nth-child(4) {
+    width: 40% !important;
+  }
+
+  body.is-printing #placementLogTable .placement-delete-button {
+    display: none !important;
+  }
+
+  body.is-printing #placementLogTable .placement-reason-badge {
+    border: 0 !important;
+    padding: 2px 5px !important;
+    font-size: 10px !important;
+  }
+
+  body.is-printing #placementLogTable .placement-comment {
+    font-size: 9px !important;
   }
 
   body.is-printing .matrix-container {

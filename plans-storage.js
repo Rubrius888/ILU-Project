@@ -8,7 +8,8 @@ let savedPlans = {
   rotationHistory: {},
   rotationSettings: {
     durationWorkingDays: 5,
-    maxConcurrentChains: 2
+    maxConcurrentChains: 2,
+    autoRotation: false
   }
 };
 
@@ -42,7 +43,8 @@ function getRotationSettings() {
     maxConcurrentChains: Math.max(
       1,
       Number.parseInt(settings.maxConcurrentChains, 10) || 2
-    )
+    ),
+    autoRotation: settings.autoRotation === true
   };
 }
 
@@ -122,7 +124,8 @@ function loadPlans() {
           1,
           Number.parseInt(parsed.rotationSettings?.durationWorkingDays, 10) || 5
         ),
-        maxConcurrentChains: Math.max(1, legacyRotationLimit || 2)
+        maxConcurrentChains: Math.max(1, legacyRotationLimit || 2),
+        autoRotation: parsed.rotationSettings?.autoRotation === true
       }
     };
     window.developmentSettings = { ...savedPlans.developmentSettings };
@@ -656,9 +659,31 @@ function openRotationSettingsDialog() {
     const chainsDescription = document.createElement('div');
     chainsDescription.textContent = 'Максимальное количество независимых ротационных цепочек, которые могут выполняться одновременно. Одна цепочка считается одной единицей независимо от количества участвующих операторов. Одновременно выполняемые цепочки не могут использовать одних и тех же операторов или посты. Чем больше значение, тем больше ротаций может проходить параллельно при соблюдении безопасного покрытия линии';
     chainsDescription.style.cssText = 'color:#64748b;font-size:12px;line-height:1.45;';
+    const autoRotationLabel = document.createElement('label');
+    autoRotationLabel.style.cssText = 'display:flex;align-items:flex-start;gap:8px;margin-top:14px;color:#334155;font-size:13px;font-weight:600;cursor:pointer;';
+    const autoRotationInput = document.createElement('input');
+    autoRotationInput.type = 'checkbox';
+    autoRotationInput.checked = current.autoRotation === true;
+    autoRotationInput.style.cssText = 'margin:2px 0 0;flex:0 0 auto;';
+    const autoRotationText = document.createElement('span');
+    autoRotationText.textContent = 'Автоматическая ротация';
+    autoRotationLabel.append(autoRotationInput, autoRotationText);
+    const autoRotationDescription = document.createElement('div');
+    autoRotationDescription.textContent = 'Если включено, приложение автоматически переставляет операторов в матрице согласно утверждённому плану ротации на текущий день. После окончания ротационного блока операторы возвращаются на исходные посты. Если выключено, расстановка операторов выполняется вручную';
+    autoRotationDescription.style.cssText = 'margin:5px 0 0 26px;color:#64748b;font-size:12px;line-height:1.45;';
     const error = document.createElement('div');
     error.style.cssText = 'display:none;margin-top:7px;color:#dc2626;font-size:12px;';
-    modal.append(durationLabel, durationInput, durationDescription, chainsLabel, chainsInput, chainsDescription, error);
+    modal.append(
+      durationLabel,
+      durationInput,
+      durationDescription,
+      chainsLabel,
+      chainsInput,
+      chainsDescription,
+      autoRotationLabel,
+      autoRotationDescription,
+      error
+    );
 
     const footer = document.createElement('div');
     footer.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;margin-top:20px;';
@@ -676,11 +701,15 @@ function openRotationSettingsDialog() {
       }
       savedPlans.rotationSettings = {
         durationWorkingDays: duration,
-        maxConcurrentChains: maxChains
+        maxConcurrentChains: maxChains,
+        autoRotation: autoRotationInput.checked
       };
       window.rotationSettings = getRotationSettings();
       savePlans();
       close();
+      if (window.rotationSettings.autoRotation) {
+        applyAutomaticRotation();
+      }
     };
     footer.append(cancel, save);
     modal.appendChild(footer);
@@ -689,6 +718,16 @@ function openRotationSettingsDialog() {
 
 function runRotationGeneration(closeDialog) {
   closeDialog();
+  // Генератор должен видеть исходную расстановку, а не временное состояние
+  // активной авторотации. При ручном конфликте безопаснее не перезапускать
+  // генерацию и не затирать изменения пользователя.
+  if (
+    getRotationSettings().autoRotation &&
+    autoRotationState &&
+    !restoreAutomaticRotationState()
+  ) {
+    return;
+  }
   window.generateRotationPlan();
 }
 
@@ -738,6 +777,385 @@ function openRotationGenerationDialog() {
   });
 }
 
+// Состояние изменений, выполненных только авторотацией. Оно хранится
+// отдельно от rotationHistory и placementLog, чтобы техническая перестановка
+// не смешивалась с фактической ручной расстановкой.
+const AUTO_ROTATION_STORAGE_KEY = 'ilu-se4-auto-rotation-v1';
+let autoRotationState = null;
+let autoRotationWarningKey = '';
+
+function loadAutomaticRotationState() {
+  try {
+    const raw = localStorage.getItem(AUTO_ROTATION_STORAGE_KEY);
+    autoRotationState = raw ? JSON.parse(raw) : null;
+    if (!autoRotationState || !Array.isArray(autoRotationState.changes)) {
+      autoRotationState = null;
+    }
+  } catch (error) {
+    console.warn('Не удалось загрузить состояние авторотации:', error);
+    autoRotationState = null;
+  }
+}
+
+function saveAutomaticRotationState() {
+  try {
+    if (autoRotationState) {
+      localStorage.setItem(
+        AUTO_ROTATION_STORAGE_KEY,
+        JSON.stringify(autoRotationState)
+      );
+    } else {
+      localStorage.removeItem(AUTO_ROTATION_STORAGE_KEY);
+    }
+  } catch (error) {
+    console.warn('Не удалось сохранить состояние авторотации:', error);
+  }
+}
+
+function automaticRotationWarning(message, key) {
+  if (autoRotationWarningKey === key) return;
+  autoRotationWarningKey = key;
+  if (typeof window.alert === 'function') window.alert(message);
+}
+
+function rotationDayIndex(date) {
+  return date.getDate() - 1;
+}
+
+function getActiveRotationChains(plan, date) {
+  if (!plan || !Array.isArray(plan.chains)) return [];
+  const dayIndex = rotationDayIndex(date);
+  return plan.chains.filter(chain => {
+    const startDay = Number(chain.startDay);
+    const endDay = Number(chain.endDay);
+    return Number.isInteger(startDay) && Number.isInteger(endDay) &&
+      startDay <= dayIndex && dayIndex <= endDay;
+  });
+}
+
+function getCurrentOperatorPosts(opIndex) {
+  const result = [];
+  for (let postIndex = 0; postIndex < posts.length; postIndex++) {
+    if (attendanceData?.[postIndex]?.[opIndex] === '○') {
+      result.push(postIndex);
+    }
+  }
+  return result;
+}
+
+function getAutomaticPostOperators(postIndex) {
+  return operators
+    .map((operator, opIndex) => ({ operator, opIndex }))
+    .filter(({ opIndex }) =>
+      operatorRoles[opIndex] !== 'СО' &&
+      attendanceData?.[postIndex]?.[opIndex] === '○'
+    )
+    .map(({ operator }) => operator)
+    .sort((a, b) => a.localeCompare(b, 'ru'));
+}
+
+function isIndependentProductionLevel(level) {
+  // В матрице Lкр также считается квалифицированным уровнем по общим
+  // правилам совместного размещения. Iкр и I сами пост не покрывают.
+  return level === 'L' || level === 'Lкр' || level === 'U';
+}
+
+function isTrainingPlacementLevel(level) {
+  return level === 'Iкр' || level === 'I';
+}
+
+function buildAutomaticRotationPlan(plan, activeChains) {
+  const excludedRoles = new Set(['НУ', 'СО', 'ДС']);
+  const participants = [];
+  const seenOperators = new Set();
+  const seenDestinations = new Set();
+
+  for (const chain of activeChains) {
+    if (!Array.isArray(chain.participants) || chain.participants.length === 0) {
+      return { error: 'В сохранённой цепочке отсутствуют участники.' };
+    }
+    for (const participant of chain.participants) {
+      const opIndex = operators.indexOf(participant.operator);
+      if (opIndex < 0) {
+        return { error: `Оператор «${participant.operator}» отсутствует в текущей матрице.` };
+      }
+      if (seenOperators.has(opIndex)) {
+        return { error: `Оператор «${participant.operator}» участвует сразу в нескольких активных цепочках.` };
+      }
+      seenOperators.add(opIndex);
+      if (excludedRoles.has(operatorRoles[opIndex]) || !isRotationAttendance(opIndex)) {
+        return { error: `Оператор «${participant.operator}» недоступен по роли или явке.` };
+      }
+
+      const fromPost = participant.fromPost == null
+        ? null
+        : posts.indexOf(participant.fromPost);
+      const toPost = participant.toPost == null
+        ? null
+        : posts.indexOf(participant.toPost);
+      if (participant.fromPost != null && fromPost < 0) {
+        return { error: `Исходный пост участника «${participant.operator}» отсутствует в текущей матрице.` };
+      }
+      if (participant.toPost != null && toPost < 0) {
+        return { error: `Целевой пост участника «${participant.operator}» отсутствует в текущей матрице.` };
+      }
+      if (toPost !== null) {
+        if (seenDestinations.has(toPost)) {
+          return { error: 'Несколько активных цепочек используют один производственный пост.' };
+        }
+        seenDestinations.add(toPost);
+        if (!isRotationLevel(data[toPost]?.[opIndex])) {
+          return { error: `У оператора «${participant.operator}» нет уровня L/U на посту «${participant.toPost}».` };
+        }
+        if (
+          participant.fromPost !== toPost &&
+          attendanceData?.[toPost]?.[opIndex] !== '' &&
+          attendanceData?.[toPost]?.[opIndex] !== '○'
+        ) {
+          return { error: `Целевая ячейка «${participant.operator}» на посту «${participant.toPost}» изменена вручную.` };
+        }
+      }
+      participants.push({ opIndex, fromPost, toPost });
+    }
+  }
+
+  const participantByOperator = new Map(
+    participants.map(participant => [participant.opIndex, participant])
+  );
+  for (const participant of participants) {
+    const currentPosts = getCurrentOperatorPosts(participant.opIndex);
+    if (participant.fromPost === null) {
+      if (currentPosts.length > 0) {
+        return { error: `Оператор «${operators[participant.opIndex]}» по плану свободен, но фактически закреплён на посту.` };
+      }
+    } else if (currentPosts.length !== 1 || currentPosts[0] !== participant.fromPost) {
+      return { error: `Расстановка оператора «${operators[participant.opIndex]}» не совпадает с планом.` };
+    }
+  }
+
+  // Целевой пост может быть занят только участником этой же перестановки.
+  // Формальное закрепление СО игнорируется: его кружок не изменяется.
+  for (const participant of participants) {
+    if (participant.toPost === null) continue;
+    for (let opIndex = 0; opIndex < operators.length; opIndex++) {
+      if (operatorRoles[opIndex] === 'СО') continue;
+      if (attendanceData?.[participant.toPost]?.[opIndex] !== '○') continue;
+      // Iкр/I могут оставаться на посту как обучаемые рядом с
+      // квалифицированным оператором и не блокируют его назначение.
+      if (isTrainingPlacementLevel(data[participant.toPost]?.[opIndex])) continue;
+      const occupant = participantByOperator.get(opIndex);
+      if (!occupant || occupant.fromPost !== participant.toPost) {
+        return { error: `Пост «${posts[participant.toPost]}» занят оператором, не входящим в активную цепочку.` };
+      }
+    }
+  }
+
+  // Для покрытия считаются только самостоятельные квалифицированные
+  // операторы. Iкр/I могут находиться на посту в рамках обучения и не
+  // являются вторым производственным покрытием.
+  const initialCoverage = posts.map((_, postIndex) => new Set(
+    operators
+      .map((_, opIndex) => opIndex)
+      .filter(opIndex =>
+        operatorRoles[opIndex] !== 'СО' &&
+        attendanceData?.[postIndex]?.[opIndex] === '○' &&
+        isIndependentProductionLevel(data[postIndex]?.[opIndex])
+      )
+  ));
+  const finalCoverage = initialCoverage.map(set => new Set(set));
+  for (const participant of participants) {
+    if (participant.fromPost !== null) finalCoverage[participant.fromPost].delete(participant.opIndex);
+    if (participant.toPost !== null) finalCoverage[participant.toPost].add(participant.opIndex);
+  }
+  const trainingByPost = posts.map((_, postIndex) =>
+    operators
+      .map((_, opIndex) => opIndex)
+      .filter(opIndex =>
+        operatorRoles[opIndex] !== 'СО' &&
+        (attendanceData?.[postIndex]?.[opIndex] === '○' ||
+          attendanceData?.[postIndex]?.[opIndex] === '△') &&
+        isTrainingPlacementLevel(data[postIndex]?.[opIndex])
+      )
+  );
+  for (let postIndex = 0; postIndex < posts.length; postIndex++) {
+    if (trainingByPost[postIndex].length > 0 && finalCoverage[postIndex].size === 0) {
+      const trainees = trainingByPost[postIndex]
+        .map(opIndex => operators[opIndex])
+        .join(', ');
+      return {
+        error: `Конфликт обучения на посту «${posts[postIndex]}»: ` +
+          `оператор(ы) ${trainees} останутся без квалифицированного L/U.`
+      };
+    }
+    if (initialCoverage[postIndex].size > 0 && finalCoverage[postIndex].size === 0) {
+      return { error: `Пост «${posts[postIndex]}» потеряет производственное покрытие.` };
+    }
+    if (finalCoverage[postIndex].size > 1) {
+      return { error: `На пост «${posts[postIndex]}» назначается более одного производственного оператора.` };
+    }
+  }
+
+  const changes = new Map();
+  const addChange = (postIndex, opIndex, nextValue) => {
+    if (postIndex === null || postIndex === undefined) return;
+    const key = `${postIndex}:${opIndex}`;
+    if (!changes.has(key)) {
+      changes.set(key, {
+        post: posts[postIndex],
+        operator: operators[opIndex],
+        previousValue: attendanceData[postIndex][opIndex] || '',
+        nextValue
+      });
+    } else {
+      changes.get(key).nextValue = nextValue;
+    }
+  };
+  for (const participant of participants) {
+    if (participant.fromPost !== null && participant.fromPost !== participant.toPost) {
+      addChange(participant.fromPost, participant.opIndex, '');
+    }
+    if (participant.toPost !== null && participant.fromPost !== participant.toPost) {
+      if (attendanceData[participant.toPost][participant.opIndex] === '○') {
+        return { error: `Целевой кружок оператора «${operators[participant.opIndex]}» уже изменён вручную.` };
+      }
+      addChange(participant.toPost, participant.opIndex, '○');
+    }
+  }
+
+  return { participants, changes: [...changes.values()] };
+}
+
+function restoreAutomaticRotationState() {
+  if (!autoRotationState || !Array.isArray(autoRotationState.changes)) return true;
+  let changed = false;
+  let conflicts = false;
+  if (Array.isArray(autoRotationState.postStates)) {
+    for (const postState of autoRotationState.postStates) {
+      const postIndex = posts.indexOf(postState.post);
+      if (postIndex < 0 ||
+        JSON.stringify(getAutomaticPostOperators(postIndex)) !==
+        JSON.stringify(postState.after || [])) {
+        conflicts = true;
+      }
+    }
+  }
+  for (const change of autoRotationState.changes) {
+    const postIndex = posts.indexOf(change.post);
+    const opIndex = operators.indexOf(change.operator);
+    if (postIndex < 0 || opIndex < 0) {
+      conflicts = true;
+      continue;
+    }
+    const currentValue = attendanceData?.[postIndex]?.[opIndex] || '';
+    if (currentValue === change.nextValue) {
+      attendanceData[postIndex][opIndex] = change.previousValue || '';
+      changed = true;
+    } else if (currentValue !== (change.previousValue || '')) {
+      conflicts = true;
+    }
+  }
+  if (changed) {
+    if (typeof renderMatrix === 'function') renderMatrix();
+    if (typeof saveState === 'function') saveState();
+  }
+  if (conflicts) {
+    automaticRotationWarning(
+      'Авторотация не смогла полностью восстановить расстановку: часть ячеек была изменена вручную. Ручные изменения сохранены.',
+      `restore:${autoRotationState.signature}`
+    );
+  }
+  autoRotationState = null;
+  saveAutomaticRotationState();
+  return !conflicts;
+}
+
+function applyAutomaticRotation() {
+  const settings = getRotationSettings();
+  if (!settings.autoRotation) return;
+
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth();
+  const monthKey = planMonthKey(year, month);
+  const snapshot = getRotationSnapshot(year, month);
+  const activeChains = getActiveRotationChains(snapshot, today);
+
+  if (activeChains.length === 0) {
+    restoreAutomaticRotationState();
+    return;
+  }
+
+  const chainIds = activeChains.map(chain => chain.id).sort((a, b) => Number(a) - Number(b));
+  const chainSignature = activeChains.map(chain => ({
+    id: chain.id,
+    startDay: chain.startDay,
+    endDay: chain.endDay,
+    participants: (chain.participants || []).map(participant => ({
+      operator: participant.operator,
+      fromPost: participant.fromPost,
+      toPost: participant.toPost
+    }))
+  }));
+  const signature = `${monthKey}:${today.getDate()}:${JSON.stringify(chainSignature)}`;
+  if (autoRotationState?.signature === signature) {
+    const cellsIntact = autoRotationState.changes.every(change => {
+      const postIndex = posts.indexOf(change.post);
+      const opIndex = operators.indexOf(change.operator);
+      return postIndex >= 0 && opIndex >= 0 &&
+        attendanceData?.[postIndex]?.[opIndex] === change.nextValue;
+    });
+    const postsIntact = !Array.isArray(autoRotationState.postStates) ||
+      autoRotationState.postStates.every(postState => {
+        const postIndex = posts.indexOf(postState.post);
+        return postIndex >= 0 &&
+          JSON.stringify(getAutomaticPostOperators(postIndex)) ===
+          JSON.stringify(postState.after || []);
+      });
+    if (!cellsIntact || !postsIntact) {
+      automaticRotationWarning(
+        'Авторотация остановлена: текущая расстановка вручную отличается от применённого плана. Ручные изменения не перезаписаны.',
+        `conflict:${signature}`
+      );
+    }
+    return;
+  }
+
+  if (autoRotationState) restoreAutomaticRotationState();
+
+  const prepared = buildAutomaticRotationPlan(snapshot, activeChains);
+  if (prepared.error) {
+    automaticRotationWarning(
+      `Авторотация не применена: ${prepared.error}`,
+      `apply:${signature}:${prepared.error}`
+    );
+    return;
+  }
+
+  for (const change of prepared.changes) {
+    const postIndex = posts.indexOf(change.post);
+    const opIndex = operators.indexOf(change.operator);
+    attendanceData[postIndex][opIndex] = change.nextValue;
+  }
+  const affectedPosts = [...new Set(prepared.changes.map(change => change.post))];
+  autoRotationState = {
+    signature,
+    monthKey,
+    day: today.getDate(),
+    chainIds,
+    changes: prepared.changes,
+    postStates: affectedPosts.map(post => ({
+      post,
+      after: getAutomaticPostOperators(posts.indexOf(post))
+    })),
+    appliedAt: new Date().toISOString()
+  };
+  saveAutomaticRotationState();
+  if (typeof saveState === 'function') saveState();
+  if (typeof renderMatrix === 'function') renderMatrix();
+}
+
+window.applyAutomaticRotation = applyAutomaticRotation;
+
 function wrapPlanGenerator(type, functionName, tableId, color) {
   const originalFunction = window[functionName];
   if (typeof originalFunction !== 'function') return;
@@ -745,6 +1163,7 @@ function wrapPlanGenerator(type, functionName, tableId, color) {
     const result = originalFunction.apply(this, arguments);
     capturePlan(type, tableId);
     restorePlan(type, tableId, color);
+    if (type === 'rotation') applyAutomaticRotation();
     return result;
   };
 }
@@ -762,6 +1181,7 @@ function wrapPlanChange(type, functionName, tableId, color) {
 }
 
 loadPlans();
+loadAutomaticRotationState();
 savedPlans.developmentSettings = {
   maxConcurrentTrainings: Math.max(
     1,
@@ -785,4 +1205,13 @@ setTimeout(() => {
   updateRotationMonthLabel();
   restorePlan('development', 'devCalendarTable', '#2563eb');
   restorePlan('rotation', 'rotCalendarTable', '#16a34a');
+  applyAutomaticRotation();
 }, 0);
+
+// Проверяем дату периодически, чтобы открытое приложение переключало
+// авторотацию в начале нового дня без перезагрузки страницы.
+setInterval(applyAutomaticRotation, 60 * 1000);
+window.addEventListener('focus', applyAutomaticRotation);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) applyAutomaticRotation();
+});

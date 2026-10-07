@@ -20,12 +20,82 @@ function getPlacementAgeColor(opName, postName) {
 }
 
 // Постановка в журнал расставноввки
+function createPlacementId() {
+  return `placement-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function escapePlacementHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getPlacementReasonText(entry) {
+  if (!entry || !entry.reason) return 'Не указана';
+  if (entry.reason === 'Другое') {
+    return entry.reasonText
+      ? `Другое: ${entry.reasonText}`
+      : 'Другое';
+  }
+  return entry.reason;
+}
+
+function getPlacementReasonClass(entry) {
+  switch (entry?.reason) {
+    case 'Ротация': return 'rotation';
+    case 'Замена': return 'replacement';
+    case 'Болезнь': return 'sick';
+    case 'Другое': return 'other';
+    default: return 'unknown';
+  }
+}
+
+function normalizePlacementLog() {
+  if (!Array.isArray(placementLog)) {
+    placementLog = [];
+    return;
+  }
+  let changed = false;
+  const usedIds = new Set();
+  placementLog = placementLog.map((entry, index) => {
+    const normalized = { ...entry };
+    if (!normalized.id || usedIds.has(normalized.id)) {
+      normalized.id = `placement-legacy-${Date.now()}-${index}`;
+      changed = true;
+    }
+    usedIds.add(normalized.id);
+    if (
+      normalized.reason !== undefined &&
+      normalized.reason !== '' &&
+      typeof normalized.reason !== 'string'
+    ) {
+      normalized.reason = String(normalized.reason);
+      changed = true;
+    }
+    return normalized;
+  });
+  if (changed && typeof saveState === 'function') saveState();
+}
+
 function logPlacement(opName, postName) {
   const now = new Date();
   const date = now.toLocaleDateString('ru-RU');
-  placementLog.push({ date, opName, postName });
+  const entry = {
+    id: createPlacementId(),
+    date,
+    opName,
+    postName,
+    reason: '',
+    reasonText: '',
+    comment: ''
+  };
+  placementLog.push(entry);
   saveState();
   renderPlacementLog();
+  openPlacementEditDialog(entry.id, true);
 }
 
 //Сортировка журнала расстановки
@@ -442,9 +512,254 @@ function createPlacementFilterButtons(
   return container;
 }
 
+function closePlacementDialog(overlay) {
+  if (overlay) overlay.remove();
+}
+
+function createPlacementDialog(titleText, buildContent) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position:fixed;inset:0;z-index:10000;display:flex;align-items:center;
+    justify-content:center;padding:16px;background:rgba(15,23,42,.48);
+  `;
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    width:min(520px,calc(100vw - 32px));max-height:calc(100vh - 32px);
+    overflow-y:auto;box-sizing:border-box;padding:22px;border-radius:12px;
+    background:#fff;box-shadow:0 20px 60px rgba(0,0,0,.28);font-family:Arial,sans-serif;
+  `;
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;';
+  const title = document.createElement('h3');
+  title.textContent = titleText;
+  title.style.cssText = 'margin:0;color:#0f172a;';
+  const closeButton = document.createElement('button');
+  closeButton.type = 'button';
+  closeButton.textContent = '×';
+  closeButton.setAttribute('aria-label', 'Закрыть');
+  closeButton.style.cssText = 'border:0;background:transparent;color:#64748b;font-size:24px;line-height:1;cursor:pointer;';
+  header.append(title, closeButton);
+  modal.appendChild(header);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  const close = () => closePlacementDialog(overlay);
+  closeButton.onclick = close;
+  overlay.addEventListener('click', event => {
+    if (event.target === overlay) close();
+  });
+  buildContent(modal, close);
+  return { overlay, modal, close };
+}
+
+function placementFormLabel(text) {
+  const label = document.createElement('label');
+  label.textContent = text;
+  label.style.cssText = 'display:block;margin:0 0 6px;color:#334155;font-size:13px;font-weight:600;';
+  return label;
+}
+
+function placementFormInput(type = 'text') {
+  const input = document.createElement('input');
+  input.type = type;
+  input.style.cssText = 'width:100%;box-sizing:border-box;padding:9px;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:12px;';
+  return input;
+}
+
+function placementFormSelect() {
+  const select = document.createElement('select');
+  select.style.cssText = 'width:100%;box-sizing:border-box;padding:9px;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:12px;background:#fff;';
+  return select;
+}
+
+function openPlacementEditDialog(entryId, isNew = false) {
+  const entry = placementLog.find(item => item.id === entryId);
+  if (!entry) return;
+
+  createPlacementDialog(isNew ? 'Добавление записи расстановки' : 'Редактирование записи расстановки', (modal, close) => {
+    const dateLabel = placementFormLabel('Дата');
+    const dateInput = placementFormInput('date');
+    dateInput.value = placementDateToIso(entry.date);
+
+    const operatorLabel = placementFormLabel('Оператор');
+    const operatorInput = placementFormSelect();
+    operators.forEach(operator => {
+      const option = document.createElement('option');
+      option.value = operator;
+      option.textContent = operator;
+      operatorInput.appendChild(option);
+    });
+    if (entry.opName && !operators.includes(entry.opName)) {
+      const option = document.createElement('option');
+      option.value = entry.opName;
+      option.textContent = `${entry.opName} (архивная запись)`;
+      operatorInput.appendChild(option);
+    }
+    operatorInput.value = entry.opName;
+
+    const postLabel = placementFormLabel('Пост');
+    const postInput = placementFormSelect();
+    posts.forEach(post => {
+      const option = document.createElement('option');
+      option.value = post;
+      option.textContent = post;
+      postInput.appendChild(option);
+    });
+    if (entry.postName && !posts.includes(entry.postName)) {
+      const option = document.createElement('option');
+      option.value = entry.postName;
+      option.textContent = `${entry.postName} (архивная запись)`;
+      postInput.appendChild(option);
+    }
+    postInput.value = entry.postName;
+
+    const reasonLabel = placementFormLabel('Причина перестановки');
+    const reasonInput = placementFormSelect();
+    [
+      ['', 'Не указана'],
+      ['Ротация', 'Ротация'],
+      ['Замена', 'Замена'],
+      ['Болезнь', 'Болезнь'],
+      ['Другое', 'Другое']
+    ].forEach(([value, text]) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = text;
+      reasonInput.appendChild(option);
+    });
+    reasonInput.value = [
+      '', 'Ротация', 'Замена', 'Болезнь', 'Другое'
+    ].includes(entry.reason) ? (entry.reason || '') : 'Другое';
+
+    const customReasonInput = placementFormInput('text');
+    customReasonInput.placeholder = 'Укажите причину';
+    const knownReasons = ['', 'Ротация', 'Замена', 'Болезнь', 'Другое'];
+    customReasonInput.value = entry.reasonText ||
+      (entry.reason && !knownReasons.includes(entry.reason) ? entry.reason : '');
+    customReasonInput.style.display = reasonInput.value === 'Другое' ? 'block' : 'none';
+    reasonInput.addEventListener('change', () => {
+      customReasonInput.style.display = reasonInput.value === 'Другое' ? 'block' : 'none';
+    });
+
+    const commentLabel = placementFormLabel('Комментарий');
+    const commentInput = document.createElement('textarea');
+    commentInput.rows = 3;
+    commentInput.placeholder = 'Комментарий';
+    commentInput.value = entry.comment || '';
+    commentInput.style.cssText = 'width:100%;box-sizing:border-box;padding:9px;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:12px;resize:vertical;font-family:inherit;';
+
+    const error = document.createElement('div');
+    error.style.cssText = 'display:none;margin:0 0 10px;color:#dc2626;font-size:12px;';
+    modal.append(
+      dateLabel, dateInput,
+      operatorLabel, operatorInput,
+      postLabel, postInput,
+      reasonLabel, reasonInput, customReasonInput,
+      commentLabel, commentInput, error
+    );
+
+    const footer = document.createElement('div');
+    footer.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.textContent = 'Отмена';
+    cancel.style.cssText = 'padding:9px 16px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#1e293b;cursor:pointer;';
+    const save = document.createElement('button');
+    save.type = 'button';
+    save.textContent = 'Сохранить';
+    save.style.cssText = 'padding:9px 16px;border:0;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer;';
+    cancel.onclick = close;
+    save.onclick = () => {
+      if (!isCompleteDateInputValue(dateInput.value)) {
+        error.textContent = 'Укажите корректную дату.';
+        error.style.display = 'block';
+        return;
+      }
+      if (!operatorInput.value || !postInput.value) {
+        error.textContent = 'Выберите оператора и пост.';
+        error.style.display = 'block';
+        return;
+      }
+      if (reasonInput.value === 'Другое' && !customReasonInput.value.trim()) {
+        error.textContent = 'Укажите причину в поле «Другое».';
+        error.style.display = 'block';
+        return;
+      }
+      const parts = dateInput.value.split('-');
+      entry.date = `${parts[2]}.${parts[1]}.${parts[0]}`;
+      entry.opName = operatorInput.value;
+      entry.postName = postInput.value;
+      entry.reason = reasonInput.value;
+      entry.reasonText = reasonInput.value === 'Другое'
+        ? customReasonInput.value.trim()
+        : '';
+      entry.comment = commentInput.value.trim();
+      saveState();
+      renderPlacementLog();
+      close();
+    };
+    footer.append(cancel, save);
+    modal.appendChild(footer);
+  });
+}
+
+function openPlacementDeleteDialog(entryId) {
+  const entry = placementLog.find(item => item.id === entryId);
+  if (!entry) return;
+  createPlacementDialog('Удаление записи', (modal, close) => {
+    const text = document.createElement('p');
+    text.textContent = 'Удалить выбранную запись из журнала расстановки? Это действие изменит историю фактической работы оператора.';
+    text.style.cssText = 'margin:0;color:#334155;line-height:1.5;';
+    modal.appendChild(text);
+    const footer = document.createElement('div');
+    footer.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;margin-top:20px;';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.textContent = 'Отмена';
+    cancel.style.cssText = 'padding:9px 16px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#1e293b;cursor:pointer;';
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = 'Удалить';
+    remove.style.cssText = 'padding:9px 16px;border:0;border-radius:6px;background:#dc2626;color:#fff;cursor:pointer;';
+    cancel.onclick = close;
+    remove.onclick = () => {
+      placementLog = placementLog.filter(item => item.id !== entryId);
+      saveState();
+      renderPlacementLog();
+      close();
+    };
+    footer.append(cancel, remove);
+    modal.appendChild(footer);
+  });
+}
+
+function printPlacementLog() {
+  const period = document.getElementById('placementPrintPeriod');
+  if (period) {
+    const from = placementFilters.dateFrom || '';
+    const to = placementFilters.dateTo || '';
+    period.textContent = from || to
+      ? `Выбранный период: ${from || '…'} — ${to || '…'}`
+      : 'Выбранный период: все даты';
+  }
+  const generated = document.getElementById('placementPrintGenerated');
+  if (generated) {
+    generated.textContent = `Дата формирования: ${new Date().toLocaleDateString('ru-RU')}`;
+  }
+  if (typeof printSections === 'function') {
+    printSections(['placementLog']);
+  } else {
+    window.print();
+  }
+}
+
 
 // Отрисовка журнала расстановки
 function renderPlacementLog() {
+  // app.js восстанавливает localStorage после загрузки модулей. Поэтому
+  // нормализуем записи перед каждым рендером: старые строки гарантированно
+  // получат id, который передаётся в обработчики редактирования и удаления.
+  normalizePlacementLog();
+
   const table = document.querySelector(
     '#placementLogTable'
   );
@@ -527,7 +842,7 @@ function renderPlacementLog() {
     tbody.innerHTML = `
       <tr>
         <td
-          colspan="3"
+          colspan="4"
           style="
             text-align:center;
             color:#94a3b8;
@@ -542,11 +857,49 @@ function renderPlacementLog() {
     return;
   }
 
-  tbody.innerHTML = filteredLog.map(entry => `
+  const sortedLog = [...filteredLog].sort((a, b) => {
+    const left = getPlacementSortValue(a, placementSort.key);
+    const right = getPlacementSortValue(b, placementSort.key);
+    const comparison = left < right ? -1 : left > right ? 1 : 0;
+    return placementSort.direction === 'desc' ? -comparison : comparison;
+  });
+
+  tbody.innerHTML = sortedLog.map(entry => `
     <tr>
-      <td>${entry.date}</td>
-      <td>${entry.opName}</td>
-      <td>${entry.postName}</td>
+      <td>${escapePlacementHtml(entry.date)}</td>
+      <td>${escapePlacementHtml(entry.opName)}</td>
+      <td>${escapePlacementHtml(entry.postName)}</td>
+      <td class="placement-reason-cell">
+        <div class="placement-reason-layout">
+          <div class="placement-reason-content">
+            <button
+              type="button"
+              class="placement-reason-badge placement-reason-${getPlacementReasonClass(entry)}"
+              data-placement-action="edit"
+              data-placement-id="${escapePlacementHtml(entry.id)}"
+            >${escapePlacementHtml(getPlacementReasonText(entry))}</button>
+            ${String(entry.comment || '').trim() ? `<div class="placement-comment">${escapePlacementHtml(String(entry.comment).trim())}</div>` : ''}
+          </div>
+          <button type="button" class="btn-small placement-delete-button" data-placement-action="delete" data-placement-id="${escapePlacementHtml(entry.id)}" title="Удалить запись">🗑</button>
+        </div>
+      </td>
     </tr>
   `).join('');
+
+  tbody.querySelectorAll('[data-placement-action="edit"]').forEach(button => {
+    button.onclick = event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openPlacementEditDialog(button.dataset.placementId);
+    };
+  });
+  tbody.querySelectorAll('[data-placement-action="delete"]').forEach(button => {
+    button.onclick = event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openPlacementDeleteDialog(button.dataset.placementId);
+    };
+  });
 }
+
+normalizePlacementLog();
