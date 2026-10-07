@@ -740,52 +740,80 @@
   </div>
 
   <div id="rotation" class="tab-content">
-    <div class="section-toolbar">
-      <div class="add-buttons-top" style="gap:8px;">
-        <span style="font-size:13px;color:#475569;">
-          Ротаций в день:
-        </span>
+        <div class="section-toolbar">
+          <div class="add-buttons-top rotation-toolbar-actions" style="gap:8px;">
+            <button
+              class="btn-small"
+              id="rotationPreviousMonth"
+              type="button"
+              onclick="changeRotationMonth(-1)"
+            >
+              ← Прошлый месяц
+            </button>
 
-        <input
-          type="number"
-          id="rotationsPerDay"
-          value="1"
-          min="1"
-          max="5"
-          style="width:50px;padding:3px 6px;border:1px solid #cbd5e1;border-radius:4px;text-align:center;"
-        >
+            <button
+              class="btn-small"
+              id="rotationCurrentMonth"
+              type="button"
+              onclick="showCurrentRotationMonth()"
+            >
+              Текущий месяц
+            </button>
 
-        <button
-          class="btn-small"
-          onclick="generateRotationPlan()"
-        >
-          Сгенерировать ротацию
-        </button>
+            <button
+              class="btn-small"
+              id="rotationNextMonth"
+              type="button"
+              onclick="changeRotationMonth(1)"
+            >
+              Следующий месяц →
+            </button>
+
+            <span
+              id="rotationPlanMonthLabel"
+              style="font-weight:600;color:#334155;text-transform:capitalize;"
+            ></span>
+
+            <button
+              class="btn-small"
+              type="button"
+              onclick="openRotationGenerationDialog()"
+            >
+              Сгенерировать
+            </button>
+          </div>
+
+          <button
+            class="btn-small print-button"
+            type="button"
+            onclick="printSections(['rotation'])"
+            title="Печать плана ротации"
+          >
+            🖨 Печать
+          </button>
+
+          <button
+            class="btn-small"
+            type="button"
+            onclick="openRotationSettingsDialog()"
+          >
+            ⚙ Настройки
+          </button>
+        </div>
+
+        <div class="matrix-container" style="overflow-x:auto;">
+          <table id="rotCalendarTable">
+            <thead></thead>
+            <tbody>
+              <tr>
+                <td style="text-align:center;color:#94a3b8;padding:40px;">
+                  Нажмите «Сгенерировать ротацию»
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-
-      <button
-        class="btn-small print-button"
-        type="button"
-        onclick="printSections(['rotation'])"
-        title="Печать плана ротации"
-      >
-        🖨 Печать
-      </button>
-    </div>
-
-    <div class="matrix-container" style="overflow-x:auto;">
-      <table id="rotCalendarTable">
-        <thead></thead>
-        <tbody>
-          <tr>
-            <td style="text-align:center;color:#94a3b8;padding:40px;">
-              Нажмите «Сгенерировать ротацию»
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
 
   <div id="planning" class="tab-content">
     <div class="section-toolbar">

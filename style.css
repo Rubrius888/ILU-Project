@@ -302,6 +302,10 @@ body {
   margin-bottom: 0;
 }
 
+.rotation-toolbar-actions {
+  flex-wrap: wrap;
+}
+
 .print-button {
   flex: 0 0 auto;
   margin-left: auto;

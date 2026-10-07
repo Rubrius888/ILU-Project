@@ -4,7 +4,12 @@ let savedPlans = {
   development: null,
   developmentHistory: {},
   developmentSettings: { maxConcurrentTrainings: 2 },
-  rotation: null
+  rotation: null,
+  rotationHistory: {},
+  rotationSettings: {
+    durationWorkingDays: 5,
+    maxConcurrentChains: 2
+  }
 };
 
 function planMonthKey(year, month) {
@@ -14,6 +19,31 @@ function planMonthKey(year, month) {
 function currentMonthDate() {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), 1);
+}
+
+function getRotationViewDate() {
+  if (!(window.rotationPlanViewDate instanceof Date)) {
+    window.rotationPlanViewDate = currentMonthDate();
+  }
+  return window.rotationPlanViewDate;
+}
+
+function getRotationSnapshot(year, month) {
+  return savedPlans.rotationHistory?.[planMonthKey(year, month)] || null;
+}
+
+function getRotationSettings() {
+  const settings = savedPlans.rotationSettings || {};
+  return {
+    durationWorkingDays: Math.max(
+      1,
+      Number.parseInt(settings.durationWorkingDays, 10) || 5
+    ),
+    maxConcurrentChains: Math.max(
+      1,
+      Number.parseInt(settings.maxConcurrentChains, 10) || 2
+    )
+  };
 }
 
 function getDevelopmentViewDate() {
@@ -57,6 +87,25 @@ function loadPlans() {
       }
     }
 
+    const rotationHistory = parsed.rotationHistory &&
+      typeof parsed.rotationHistory === 'object'
+      ? { ...parsed.rotationHistory }
+      : {};
+
+    // Backward-compatible migration of the old single-rotation format.
+    if (parsed.rotation?.year !== undefined && parsed.rotation?.month !== undefined) {
+      const legacyRotationKey = planMonthKey(parsed.rotation.year, parsed.rotation.month);
+      if (!rotationHistory[legacyRotationKey]) {
+        rotationHistory[legacyRotationKey] = parsed.rotation;
+        migrated = true;
+      }
+    }
+
+    const legacyRotationLimit = Number.parseInt(
+      parsed.rotationSettings?.maxConcurrentChains ??
+      parsed.rotation?.rotationsPerDay,
+      10
+    );
     savedPlans = {
       development: parsed.development || null,
       developmentHistory: history,
@@ -66,9 +115,18 @@ function loadPlans() {
           Number.parseInt(parsed.developmentSettings?.maxConcurrentTrainings, 10) || 2
         )
       },
-      rotation: parsed.rotation || null
+      rotation: parsed.rotation || null,
+      rotationHistory,
+      rotationSettings: {
+        durationWorkingDays: Math.max(
+          1,
+          Number.parseInt(parsed.rotationSettings?.durationWorkingDays, 10) || 5
+        ),
+        maxConcurrentChains: Math.max(1, legacyRotationLimit || 2)
+      }
     };
     window.developmentSettings = { ...savedPlans.developmentSettings };
+    window.rotationSettings = getRotationSettings();
     if (migrated) savePlans();
   } catch (error) {
     console.error('Не удалось загрузить планинги:', error);
@@ -121,6 +179,35 @@ function capturePlan(type, tableId) {
     return;
   }
 
+  if (type === 'rotation') {
+    const viewDate = getRotationViewDate();
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const key = planMonthKey(year, month);
+    const previous = getRotationSnapshot(year, month);
+    const generationMeta = window.lastRotationGenerationMeta;
+    const generatedForMonth = generationMeta?.year === year && generationMeta?.month === month;
+    const meta = generatedForMonth ? generationMeta : (previous || {});
+    const settings = getRotationSettings();
+    const snapshot = {
+      year,
+      month,
+      generatedAt: meta.generatedAt || previous?.generatedAt || null,
+      posts: [...posts],
+      operators: [...operators],
+      headers,
+      rows,
+      chains: generatedForMonth ? (meta.chains || []) : [],
+      needs: generatedForMonth ? (meta.needs || []) : (previous?.needs || []),
+      durationWorkingDays: meta.durationWorkingDays || previous?.durationWorkingDays || settings.durationWorkingDays,
+      maxConcurrentChains: meta.maxConcurrentChains || previous?.maxConcurrentChains || settings.maxConcurrentChains
+    };
+    savedPlans.rotationHistory[key] = snapshot;
+    savedPlans.rotation = snapshot;
+    savePlans();
+    return;
+  }
+
   const now = new Date();
   savedPlans[type] = {
     year: now.getFullYear(),
@@ -128,8 +215,7 @@ function capturePlan(type, tableId) {
     posts: [...posts],
     operators: [...operators],
     headers,
-    rows,
-    rotationsPerDay: document.getElementById('rotationsPerDay')?.value || 1
+    rows
   };
   savePlans();
 }
@@ -149,11 +235,21 @@ function showMissingDevelopmentPlan(year, month) {
   renderDevelopmentStatus(null);
 }
 
+function showMissingRotationPlan(year, month) {
+  const table = document.getElementById('rotCalendarTable');
+  if (!table || !table.tHead || !table.tBodies[0]) return;
+  table.tHead.innerHTML = '';
+  table.tBodies[0].innerHTML = `<tr><td style="text-align:center;color:#94a3b8;padding:40px;">План ротации за ${String(month + 1).padStart(2, '0')}.${year} не сохранён</td></tr>`;
+}
+
 function restorePlan(type, tableId, color, explicitPlan = null) {
   let plan = explicitPlan;
   if (type === 'development') {
     const date = getDevelopmentViewDate();
     plan = plan || getDevelopmentSnapshot(date.getFullYear(), date.getMonth());
+  } else if (type === 'rotation') {
+    const date = getRotationViewDate();
+    plan = plan || getRotationSnapshot(date.getFullYear(), date.getMonth()) || savedPlans.rotation;
   } else {
     plan = plan || savedPlans[type];
   }
@@ -162,6 +258,9 @@ function restorePlan(type, tableId, color, explicitPlan = null) {
     if (type === 'development') {
       const date = getDevelopmentViewDate();
       showMissingDevelopmentPlan(date.getFullYear(), date.getMonth());
+    } else if (type === 'rotation') {
+      const date = getRotationViewDate();
+      showMissingRotationPlan(date.getFullYear(), date.getMonth());
     }
     return;
   }
@@ -171,9 +270,26 @@ function restorePlan(type, tableId, color, explicitPlan = null) {
   table.tHead.innerHTML = '';
   table.tBodies[0].innerHTML = '';
 
-  if (plan.headers.length > 0) {
+  const rotationChainCells = {};
+  if (type === 'rotation' && Array.isArray(plan.chains)) {
+    for (const chain of plan.chains) {
+      const startDay = Number(chain.startDay);
+      const endDay = Number(chain.endDay);
+      for (const participant of chain.participants || []) {
+        const postIndex = (plan.posts || posts).indexOf(participant.toPost);
+        if (postIndex < 0) continue;
+        for (let day = startDay; day <= endDay; day++) {
+          rotationChainCells[`${postIndex}:${day}`] = chain.id;
+        }
+      }
+    }
+  }
+
+  const planHeaders = Array.isArray(plan.headers) ? plan.headers : [];
+  const planRows = Array.isArray(plan.rows) ? plan.rows : [];
+  if (planHeaders.length > 0) {
     const headerRow = table.tHead.insertRow();
-    plan.headers.forEach((text, index) => {
+    planHeaders.forEach((text, index) => {
       const th = document.createElement('th');
       th.textContent = text;
       th.style.whiteSpace = 'pre-line';
@@ -185,7 +301,7 @@ function restorePlan(type, tableId, color, explicitPlan = null) {
     });
   }
 
-  plan.rows.forEach((values, rowIndex) => {
+  planRows.forEach((values, rowIndex) => {
     const row = table.tBodies[0].insertRow();
     values.forEach((value, columnIndex) => {
       const cell = row.insertCell();
@@ -213,6 +329,11 @@ function restorePlan(type, tableId, color, explicitPlan = null) {
         cell.dataset.op = operator;
         cell.style.color = color;
         cell.style.fontWeight = '600';
+        const chainId = rotationChainCells[`${rowIndex}:${columnIndex - 1}`];
+        if (chainId) {
+          cell.dataset.chainId = String(chainId);
+          cell.title = `Цепочка ${chainId}`;
+        }
       } else {
         cell.textContent = '+';
         cell.style.color = '#94a3b8';
@@ -231,9 +352,6 @@ function restorePlan(type, tableId, color, explicitPlan = null) {
     });
   });
 
-  if (type === 'rotation' && document.getElementById('rotationsPerDay')) {
-    document.getElementById('rotationsPerDay').value = plan.rotationsPerDay || 1;
-  }
   if (type === 'development') renderDevelopmentStatus(plan);
 }
 
@@ -279,6 +397,45 @@ function changeDevelopmentMonth(delta) {
 function showCurrentDevelopmentMonth() {
   const date = currentMonthDate();
   setDevelopmentPlanMonth(date.getFullYear(), date.getMonth());
+}
+
+function rotationMonthTitle(date = getRotationViewDate()) {
+  return date.toLocaleDateString('ru-RU', {
+    month: 'long',
+    year: 'numeric'
+  });
+}
+
+function updateRotationMonthLabel() {
+  const date = getRotationViewDate();
+  const label = document.getElementById('rotationPlanMonthLabel');
+  if (label) {
+    label.textContent = rotationMonthTitle(date);
+  }
+  const current = currentMonthDate();
+  const currentButton = document.getElementById('rotationCurrentMonth');
+  if (currentButton) {
+    currentButton.disabled = date.getFullYear() === current.getFullYear() &&
+      date.getMonth() === current.getMonth();
+  }
+}
+
+function setRotationPlanMonth(year, month) {
+  window.rotationPlanViewDate = new Date(year, month, 1);
+  updateRotationMonthLabel();
+  const plan = getRotationSnapshot(year, month);
+  if (plan) restorePlan('rotation', 'rotCalendarTable', '#16a34a', plan);
+  else showMissingRotationPlan(year, month);
+}
+
+function changeRotationMonth(delta) {
+  const date = getRotationViewDate();
+  setRotationPlanMonth(date.getFullYear(), date.getMonth() + delta);
+}
+
+function showCurrentRotationMonth() {
+  const date = currentMonthDate();
+  setRotationPlanMonth(date.getFullYear(), date.getMonth());
 }
 
 function developmentMonthTitle(date = getDevelopmentViewDate()) {
@@ -470,6 +627,117 @@ function openDevelopmentGenerationDialog() {
   });
 }
 
+function openRotationSettingsDialog() {
+  const current = getRotationSettings();
+  createDevelopmentPlanDialog('Настройки плана ротации', (modal, close) => {
+    addPlanModalSection(modal, 'Параметры ротации');
+    const durationLabel = document.createElement('label');
+    durationLabel.textContent = 'Длительность ротации, рабочих дней';
+    durationLabel.style.cssText = 'display:block;margin-bottom:6px;color:#334155;font-size:13px;font-weight:600;';
+    const durationInput = document.createElement('input');
+    durationInput.type = 'number';
+    durationInput.min = '1';
+    durationInput.step = '1';
+    durationInput.value = String(current.durationWorkingDays);
+    durationInput.style.cssText = 'width:100%;box-sizing:border-box;padding:9px;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:5px;';
+    const durationDescription = document.createElement('div');
+    durationDescription.textContent = 'Количество рабочих дней, в течение которых операторы выполняют работу на назначенных постах в рамках одной ротационной цепочки. Все участники цепочки ротируются одновременно на одинаковый срок. Учитываются только рабочие дни с понедельника по пятницу. После завершения блока операторы возвращаются на исходные посты';
+    durationDescription.style.cssText = 'margin-bottom:12px;color:#64748b;font-size:12px;line-height:1.45;';
+
+    const chainsLabel = document.createElement('label');
+    chainsLabel.textContent = 'Максимальное количество одновременных цепочек';
+    chainsLabel.style.cssText = 'display:block;margin-bottom:6px;color:#334155;font-size:13px;font-weight:600;';
+    const chainsInput = document.createElement('input');
+    chainsInput.type = 'number';
+    chainsInput.min = '1';
+    chainsInput.step = '1';
+    chainsInput.value = String(current.maxConcurrentChains);
+    chainsInput.style.cssText = 'width:100%;box-sizing:border-box;padding:9px;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:5px;';
+    const chainsDescription = document.createElement('div');
+    chainsDescription.textContent = 'Максимальное количество независимых ротационных цепочек, которые могут выполняться одновременно. Одна цепочка считается одной единицей независимо от количества участвующих операторов. Одновременно выполняемые цепочки не могут использовать одних и тех же операторов или посты. Чем больше значение, тем больше ротаций может проходить параллельно при соблюдении безопасного покрытия линии';
+    chainsDescription.style.cssText = 'color:#64748b;font-size:12px;line-height:1.45;';
+    const error = document.createElement('div');
+    error.style.cssText = 'display:none;margin-top:7px;color:#dc2626;font-size:12px;';
+    modal.append(durationLabel, durationInput, durationDescription, chainsLabel, chainsInput, chainsDescription, error);
+
+    const footer = document.createElement('div');
+    footer.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;margin-top:20px;';
+    const cancel = planButton('Отмена');
+    const save = planButton('Сохранить', true);
+    cancel.onclick = close;
+    save.onclick = () => {
+      const duration = Number(durationInput.value);
+      const maxChains = Number(chainsInput.value);
+      if (!Number.isInteger(duration) || duration < 1 ||
+        !Number.isInteger(maxChains) || maxChains < 1) {
+        error.textContent = 'Введите целые числа не меньше 1.';
+        error.style.display = 'block';
+        return;
+      }
+      savedPlans.rotationSettings = {
+        durationWorkingDays: duration,
+        maxConcurrentChains: maxChains
+      };
+      window.rotationSettings = getRotationSettings();
+      savePlans();
+      close();
+    };
+    footer.append(cancel, save);
+    modal.appendChild(footer);
+  });
+}
+
+function runRotationGeneration(closeDialog) {
+  closeDialog();
+  window.generateRotationPlan();
+}
+
+function openRotationRegenerationDialog(closeParent) {
+  if (closeParent) closeParent();
+  createDevelopmentPlanDialog('Повторная генерация плана ротации', (modal, close) => {
+    const text = document.createElement('p');
+    text.style.cssText = 'margin:0;color:#334155;line-height:1.5;';
+    text.textContent = 'На выбранный месяц уже существует план ротации. Повторная генерация заменит текущий план на новый. Продолжить?';
+    modal.appendChild(text);
+    const footer = document.createElement('div');
+    footer.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;margin-top:20px;';
+    const cancel = planButton('Отмена');
+    const confirm = planButton('Сгенерировать повторно', true);
+    cancel.onclick = close;
+    confirm.onclick = () => runRotationGeneration(close);
+    footer.append(cancel, confirm);
+    modal.appendChild(footer);
+  });
+}
+
+function openRotationGenerationDialog() {
+  const date = getRotationViewDate();
+  const existing = getRotationSnapshot(date.getFullYear(), date.getMonth());
+  const current = getRotationSettings();
+  createDevelopmentPlanDialog('Генерация плана ротации', (modal, close) => {
+    const info = document.createElement('div');
+    info.style.cssText = 'display:grid;gap:9px;color:#334155;font-size:13px;';
+    info.innerHTML = `
+      <div><b>Месяц:</b> ${rotationMonthTitle(date)}</div>
+      <div><b>Длительность ротации:</b> ${current.durationWorkingDays} рабочих дней</div>
+      <div><b>Максимум одновременных цепочек:</b> ${current.maxConcurrentChains}</div>
+      <div style="color:#64748b;line-height:1.45;">План будет сформирован с учётом текущей ILU-матрицы, доступности операторов и календарных ограничений.</div>
+    `;
+    modal.appendChild(info);
+    const footer = document.createElement('div');
+    footer.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;margin-top:20px;';
+    const cancel = planButton('Отмена');
+    const generate = planButton('Сгенерировать', true);
+    cancel.onclick = close;
+    generate.onclick = () => {
+      if (existing) openRotationRegenerationDialog(close);
+      else runRotationGeneration(close);
+    };
+    footer.append(cancel, generate);
+    modal.appendChild(footer);
+  });
+}
+
 function wrapPlanGenerator(type, functionName, tableId, color) {
   const originalFunction = window[functionName];
   if (typeof originalFunction !== 'function') return;
@@ -485,6 +753,7 @@ function wrapPlanChange(type, functionName, tableId, color) {
   const originalFunction = window[functionName];
   if (typeof originalFunction !== 'function') return;
   window[functionName] = function () {
+    if (type === 'rotation') window.lastRotationGenerationMeta = null;
     const result = originalFunction.apply(this, arguments);
     capturePlan(type, tableId);
     restorePlan(type, tableId, color);
@@ -501,6 +770,8 @@ savedPlans.developmentSettings = {
 };
 window.developmentSettings = { ...savedPlans.developmentSettings };
 window.developmentPlanViewDate = currentMonthDate();
+window.rotationSettings = getRotationSettings();
+window.rotationPlanViewDate = currentMonthDate();
 
 wrapPlanGenerator('development', 'generateDevelopmentPlan', 'devCalendarTable', '#2563eb');
 wrapPlanGenerator('rotation', 'generateRotationPlan', 'rotCalendarTable', '#16a34a');
@@ -511,6 +782,7 @@ wrapPlanChange('rotation', 'deleteRotationOp', 'rotCalendarTable', '#16a34a');
 
 setTimeout(() => {
   updateDevelopmentMonthLabel();
+  updateRotationMonthLabel();
   restorePlan('development', 'devCalendarTable', '#2563eb');
   restorePlan('rotation', 'rotCalendarTable', '#16a34a');
 }, 0);
