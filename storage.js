@@ -19,6 +19,7 @@ function saveState() {
     data,
     trainingRecords,
     placementLog,
+    placementInitialPlacementDate,
     statsHistory,
     workshopChief,
     sectionChief,
@@ -119,6 +120,10 @@ function loadState() {
     data = state.data;
     trainingRecords = state.trainingRecords;
     placementLog = state.placementLog;
+    placementInitialPlacementDate =
+      typeof state.placementInitialPlacementDate === 'string'
+        ? state.placementInitialPlacementDate
+        : '';
 
     statsHistory = Array.isArray(state.statsHistory)
       ? state.statsHistory

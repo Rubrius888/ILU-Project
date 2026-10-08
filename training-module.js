@@ -562,6 +562,19 @@ function openTrainingRecordForm(options = {}) {
 
     overlay.remove();
 
+    // Назначение на △ фиксируется в журнале только после сохранения
+    // подтверждённой записи обучения. Отмена формы не создаёт событие.
+    if (
+      automatic &&
+      typeof logPlacement === 'function'
+    ) {
+      logPlacement(
+        selectedOperator,
+        selectedPost,
+        'Обучение'
+      );
+    }
+
     renderTrainingTable();
     renderMatrix();
   };

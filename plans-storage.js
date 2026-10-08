@@ -483,8 +483,16 @@ function createDevelopmentPlanDialog(titleText, buildContent) {
 
   const closeDialog = () => closeDevelopmentPlanDialog(overlay);
   close.onclick = closeDialog;
-  overlay.addEventListener('click', event => {
-    if (event.target === overlay) closeDialog();
+  let backdropMouseDown = false;
+  overlay.addEventListener('mousedown', event => {
+    backdropMouseDown = event.button === 0 && event.target === overlay;
+  });
+  overlay.addEventListener('mouseup', event => {
+    const closeByBackdrop = backdropMouseDown &&
+      event.button === 0 &&
+      event.target === overlay;
+    backdropMouseDown = false;
+    if (closeByBackdrop) closeDialog();
   });
   overlay.__escapeHandler = event => {
     if (event.key === 'Escape') closeDialog();

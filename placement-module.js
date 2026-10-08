@@ -47,6 +47,9 @@ function getPlacementReasonClass(entry) {
   switch (entry?.reason) {
     case 'Ротация': return 'rotation';
     case 'Замена': return 'replacement';
+    case 'Первичная расстановка': return 'primary';
+    case 'Обучение': return 'production';
+    case 'Производственная необходимость':
     case 'Болезнь': return 'sick';
     case 'Другое': return 'other';
     default: return 'unknown';
@@ -80,22 +83,99 @@ function normalizePlacementLog() {
   if (changed && typeof saveState === 'function') saveState();
 }
 
-function logPlacement(opName, postName) {
+function logPlacement(opName, postName, reason = '') {
   const now = new Date();
   const date = now.toLocaleDateString('ru-RU');
+
+  // Автоматическая запись обучения не должна дублироваться при повторном
+  // открытии или сохранении одной и той же формы обучения.
+  if (
+    reason &&
+    placementLog.some(entry =>
+      entry.date === date &&
+      entry.opName === opName &&
+      entry.postName === postName &&
+      entry.reason === reason
+    )
+  ) {
+    return;
+  }
+
   const entry = {
     id: createPlacementId(),
     date,
     opName,
     postName,
-    reason: '',
+    reason,
     reasonText: '',
     comment: ''
   };
   placementLog.push(entry);
   saveState();
   renderPlacementLog();
+
+  if (reason) {
+    return;
+  }
+
   openPlacementEditDialog(entry.id, true);
+}
+
+function ensureDailyInitialPlacement() {
+  const today = new Date().toLocaleDateString('ru-RU');
+
+  if (placementInitialPlacementDate === today) {
+    return false;
+  }
+
+  // Если запись за сегодня уже существует, считаем день обработанным.
+  // Это также предотвращает восстановление записи, удалённой пользователем.
+  if (placementLog.some(entry =>
+    entry.date === today &&
+    entry.reason === 'Первичная расстановка'
+  )) {
+    placementInitialPlacementDate = today;
+    saveState();
+    return false;
+  }
+
+  const assignments = [];
+
+  for (let row = 0; row < posts.length; row++) {
+    for (let col = 0; col < operators.length; col++) {
+      const status = attendanceData?.[row]?.[col];
+
+      if (status === '○' || status === '△') {
+        assignments.push({
+          opName: operators[col],
+          postName: posts[row],
+          status
+        });
+      }
+    }
+  }
+
+  // Пустая матрица не фиксирует день обработанным.
+  if (assignments.length === 0) {
+    return false;
+  }
+
+  assignments.forEach(({ opName, postName, status }) => {
+    placementLog.push({
+      id: createPlacementId(),
+      date: today,
+      opName,
+      postName,
+      status,
+      reason: 'Первичная расстановка',
+      reasonText: '',
+      comment: ''
+    });
+  });
+
+  placementInitialPlacementDate = today;
+  saveState();
+  return true;
 }
 
 //Сортировка журнала расстановки
@@ -544,8 +624,16 @@ function createPlacementDialog(titleText, buildContent) {
   document.body.appendChild(overlay);
   const close = () => closePlacementDialog(overlay);
   closeButton.onclick = close;
-  overlay.addEventListener('click', event => {
-    if (event.target === overlay) close();
+  let backdropMouseDown = false;
+  overlay.addEventListener('mousedown', event => {
+    backdropMouseDown = event.button === 0 && event.target === overlay;
+  });
+  overlay.addEventListener('mouseup', event => {
+    const closeByBackdrop = backdropMouseDown &&
+      event.button === 0 &&
+      event.target === overlay;
+    backdropMouseDown = false;
+    if (closeByBackdrop) close();
   });
   buildContent(modal, close);
   return { overlay, modal, close };
@@ -618,7 +706,8 @@ function openPlacementEditDialog(entryId, isNew = false) {
       ['', 'Не указана'],
       ['Ротация', 'Ротация'],
       ['Замена', 'Замена'],
-      ['Болезнь', 'Болезнь'],
+      ['Производственная необходимость', 'Производственная необходимость'],
+      ['Обучение', 'Обучение'],
       ['Другое', 'Другое']
     ].forEach(([value, text]) => {
       const option = document.createElement('option');
@@ -626,13 +715,34 @@ function openPlacementEditDialog(entryId, isNew = false) {
       option.textContent = text;
       reasonInput.appendChild(option);
     });
+
+    // Старые записи с причиной «Болезнь» сохраняются без изменений.
+    // Для их редактирования оставляем отдельный исторический вариант,
+    // который не предлагается для новых записей.
+    if (entry.reason === 'Болезнь') {
+      const legacyOption = document.createElement('option');
+      legacyOption.value = 'Болезнь';
+      legacyOption.textContent = 'Болезнь (историческая)';
+      reasonInput.appendChild(legacyOption);
+    }
+
     reasonInput.value = [
-      '', 'Ротация', 'Замена', 'Болезнь', 'Другое'
+      '', 'Ротация', 'Замена',
+      'Производственная необходимость',
+      'Обучение', 'Другое', 'Болезнь'
     ].includes(entry.reason) ? (entry.reason || '') : 'Другое';
 
     const customReasonInput = placementFormInput('text');
     customReasonInput.placeholder = 'Укажите причину';
-    const knownReasons = ['', 'Ротация', 'Замена', 'Болезнь', 'Другое'];
+    const knownReasons = [
+      '',
+      'Ротация',
+      'Замена',
+      'Производственная необходимость',
+      'Обучение',
+      'Другое',
+      'Болезнь'
+    ];
     customReasonInput.value = entry.reasonText ||
       (entry.reason && !knownReasons.includes(entry.reason) ? entry.reason : '');
     customReasonInput.style.display = reasonInput.value === 'Другое' ? 'block' : 'none';
@@ -720,12 +830,45 @@ function openPlacementDeleteDialog(entryId) {
     remove.type = 'button';
     remove.textContent = 'Удалить';
     remove.style.cssText = 'padding:9px 16px;border:0;border-radius:6px;background:#dc2626;color:#fff;cursor:pointer;';
-    cancel.onclick = close;
+    let deletionHandled = false;
+    const cleanupKeyboard = () => {
+      document.removeEventListener('keydown', handleKeyboard, true);
+    };
+    const finishClose = () => {
+      cleanupKeyboard();
+      close();
+    };
+    const handleKeyboard = event => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        finishClose();
+        return;
+      }
+
+      if (event.key !== 'Enter') {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      if (event.repeat || deletionHandled) {
+        return;
+      }
+
+      remove.click();
+    };
+
+    document.addEventListener('keydown', handleKeyboard, true);
+    cancel.onclick = finishClose;
     remove.onclick = () => {
+      if (deletionHandled) return;
+      deletionHandled = true;
       placementLog = placementLog.filter(item => item.id !== entryId);
       saveState();
       renderPlacementLog();
-      close();
+      finishClose();
     };
     footer.append(cancel, remove);
     modal.appendChild(footer);

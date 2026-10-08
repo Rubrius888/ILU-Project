@@ -19,6 +19,7 @@ if (!restoredState) {
   data = [];
   trainingRecords = [];
   placementLog = [];
+  placementInitialPlacementDate = '';
   statsHistory = [];
   placementFilters = {
     dateFrom: '',
@@ -171,6 +172,9 @@ restoreSavedFilters();
 restoreInfoCardsState();
 updateDateBar();
 updateInfoCard();
+if (typeof ensureDailyInitialPlacement === 'function') {
+  ensureDailyInitialPlacement();
+}
 renderMatrix();
 renderTrainingTable();
 renderPlacementLog();

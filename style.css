@@ -1616,6 +1616,7 @@ body {
   body.is-printing #matrixInfo.print-target > .date-bar,
   body.is-printing #matrixInfo.print-target > .info-card,
   body.is-printing #matrixInfo.print-target > .stats-card {
+    display: block !important;
     grid-column: auto !important;
     min-width: 0 !important;
     width: auto !important;

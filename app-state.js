@@ -224,6 +224,9 @@ let trainingFilterMenu = null;
 // Журнал расстановки
 let placementLog = [];
 
+// Дата последней автоматической первичной расстановки.
+let placementInitialPlacementDate = '';
+
 // История ежедневных показателей вкладки «Статистика»
 let statsHistory = [];
 
