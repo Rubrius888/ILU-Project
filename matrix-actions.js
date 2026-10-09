@@ -413,6 +413,118 @@ function addPost() {
   renderMatrix();
 }
 
+// Перемещение поста вместе со всеми пост-ориентированными данными.
+// Проверяем структуру до изменения, чтобы не получить частично переставленное
+// состояние при повреждённых или несовместимых данных.
+function movePost(index, direction) {
+  const targetIndex = index + direction;
+  const postCount = posts.length;
+  const operatorCount = operators.length;
+
+  const validIndex = Number.isInteger(index) &&
+    Number.isInteger(targetIndex) &&
+    index >= 0 && targetIndex >= 0 &&
+    index < postCount && targetIndex < postCount;
+
+  const validStructure =
+    Array.isArray(difficulty) && difficulty.length === postCount &&
+    Array.isArray(ergonomics) && ergonomics.length === postCount &&
+    Array.isArray(trainingDays) && trainingDays.length === postCount &&
+    Array.isArray(data) && data.length === postCount &&
+    Array.isArray(attendanceData) && attendanceData.length === postCount &&
+    data.every(row => Array.isArray(row) && row.length === operatorCount) &&
+    attendanceData.every(row =>
+      Array.isArray(row) && row.length === operatorCount
+    );
+
+  if (!validIndex || !validStructure) {
+    console.error('Перемещение поста отменено: некорректная структура матрицы.');
+    return false;
+  }
+
+  const reorder = (items) => {
+    const next = items.slice();
+    [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+    return next;
+  };
+
+  // Все новые массивы формируем до публикации результата в глобальное состояние.
+  const nextPosts = reorder(posts);
+  const nextDifficulty = reorder(difficulty);
+  const nextErgonomics = reorder(ergonomics);
+  const nextTrainingDays = reorder(trainingDays);
+  const nextData = reorder(data.map(row => row.slice()));
+  const nextAttendanceData = reorder(
+    attendanceData.map(row => row.slice())
+  );
+
+  posts = nextPosts;
+  difficulty = nextDifficulty;
+  ergonomics = nextErgonomics;
+  trainingDays = nextTrainingDays;
+  data = nextData;
+  attendanceData = nextAttendanceData;
+
+  // renderMatrix() использует штатный saveState() после отрисовки.
+  renderMatrix();
+  return true;
+}
+
+// Перемещение оператора вместе с операторскими атрибутами и колонкой матрицы.
+function moveOperator(index, direction) {
+  const targetIndex = index + direction;
+  const postCount = posts.length;
+  const operatorCount = operators.length;
+
+  const validIndex = Number.isInteger(index) &&
+    Number.isInteger(targetIndex) &&
+    index >= 0 && targetIndex >= 0 &&
+    index < operatorCount && targetIndex < operatorCount;
+
+  const validStructure =
+    Array.isArray(operatorAttendance) &&
+    operatorAttendance.length === operatorCount &&
+    Array.isArray(operatorRoles) &&
+    operatorRoles.length === operatorCount &&
+    Array.isArray(data) && data.length === postCount &&
+    Array.isArray(attendanceData) && attendanceData.length === postCount &&
+    data.every(row => Array.isArray(row) && row.length === operatorCount) &&
+    attendanceData.every(row =>
+      Array.isArray(row) && row.length === operatorCount
+    );
+
+  if (!validIndex || !validStructure) {
+    console.error('Перемещение оператора отменено: некорректная структура матрицы.');
+    return false;
+  }
+
+  const reorder = (items) => {
+    const next = items.slice();
+    [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+    return next;
+  };
+
+  const reorderColumns = (matrix) => matrix.map(row => reorder(row));
+
+  const nextOperators = reorder(operators);
+  const nextOperatorAttendance = reorder(operatorAttendance);
+  const nextOperatorRoles = reorder(operatorRoles);
+  const nextData = reorderColumns(data.map(row => row.slice()));
+  const nextAttendanceData = reorderColumns(
+    attendanceData.map(row => row.slice())
+  );
+
+  operators = nextOperators;
+  operatorAttendance = nextOperatorAttendance;
+  operatorRoles = nextOperatorRoles;
+  data = nextData;
+  attendanceData = nextAttendanceData;
+
+  // renderMatrix() использует штатный saveState() после отрисовки.
+  renderMatrix();
+  return true;
+}
+
 // Удаление оператора
 function deleteOperator(name) {
   if (!confirm(`Удалить оператора «${name}»?`)) return;

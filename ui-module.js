@@ -6,11 +6,14 @@ function showInlineSelect(
   options,
   callback
 ) {
-  const oldSelect =
-    document.querySelector('.inline-select');
+  const oldSelect = document.querySelector('.inline-select');
 
   if (oldSelect) {
-    oldSelect.remove();
+    if (typeof oldSelect.__close === 'function') {
+      oldSelect.__close();
+    } else {
+      oldSelect.remove();
+    }
   }
 
   const wrapper = document.createElement('div');
@@ -27,6 +30,7 @@ function showInlineSelect(
     background: white;
     outline: none;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    box-sizing: border-box;
   `;
 
   const select = document.createElement('select');
@@ -38,6 +42,7 @@ function showInlineSelect(
     font-size: 13px;
     background: white;
     outline: none;
+    box-sizing: border-box;
   `;
 
   select.size = Math.min(options.length, 6);
@@ -56,82 +61,134 @@ function showInlineSelect(
     select.appendChild(optionElement);
   });
 
+  wrapper.appendChild(select);
+  document.body.appendChild(wrapper);
+
+  let closed = false;
+
+  const removeListeners = () => {
+    document.removeEventListener('click', closeHandler);
+    window.removeEventListener('resize', reposition);
+    window.removeEventListener('scroll', reposition, true);
+  };
+
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    removeListeners();
+    wrapper.remove();
+  };
+
+  // Позволяет корректно закрыть список при открытии другого списка,
+  // переключении вкладки или повторной отрисовке интерфейса.
+  wrapper.__close = close;
+
+  const getVisibleBounds = () => {
+    const matrixContainer = cell.closest('.matrix-container');
+    const containerRect = matrixContainer?.getBoundingClientRect();
+
+    return {
+      left: Math.max(5, containerRect?.left ?? 0),
+      top: Math.max(5, containerRect?.top ?? 0),
+      right: Math.min(
+        window.innerWidth - 5,
+        containerRect?.right ?? window.innerWidth - 5
+      ),
+      bottom: Math.min(
+        window.innerHeight - 5,
+        containerRect?.bottom ?? window.innerHeight - 5
+      )
+    };
+  };
+
+  const reposition = () => {
+    if (closed || !cell.isConnected) {
+      close();
+      return;
+    }
+
+    const cellRect = cell.getBoundingClientRect();
+    const bounds = getVisibleBounds();
+    const cellVisible =
+      cellRect.right > bounds.left &&
+      cellRect.left < bounds.right &&
+      cellRect.bottom > bounds.top &&
+      cellRect.top < bounds.bottom;
+
+    if (!cellVisible || bounds.right <= bounds.left || bounds.bottom <= bounds.top) {
+      close();
+      return;
+    }
+
+    const availableWidth = Math.max(1, bounds.right - bounds.left);
+    wrapper.style.width = `${Math.min(180, availableWidth)}px`;
+    const naturalRect = wrapper.getBoundingClientRect();
+
+    const measuredHeight = naturalRect.height;
+    const spaceBelow = Math.max(0, bounds.bottom - cellRect.bottom - 2);
+    const spaceAbove = Math.max(0, cellRect.top - bounds.top - 2);
+    const opensBelow =
+      measuredHeight <= spaceBelow || spaceBelow >= spaceAbove;
+    const availableHeight = opensBelow ? spaceBelow : spaceAbove;
+
+    if (measuredHeight > availableHeight) {
+      wrapper.style.maxHeight = `${Math.max(1, availableHeight)}px`;
+      wrapper.style.overflowY = 'auto';
+      select.style.maxHeight = `${Math.max(1, availableHeight - 4)}px`;
+      select.style.overflowY = 'auto';
+    } else {
+      wrapper.style.maxHeight = '';
+      wrapper.style.overflowY = '';
+      select.style.maxHeight = '';
+      select.style.overflowY = '';
+    }
+
+    const popupRect = wrapper.getBoundingClientRect();
+    const left = Math.min(
+      Math.max(bounds.left, cellRect.left),
+      Math.max(bounds.left, bounds.right - popupRect.width)
+    );
+    const preferredTop = opensBelow
+      ? cellRect.bottom + 2
+      : cellRect.top - popupRect.height - 2;
+    const top = Math.min(
+      Math.max(bounds.top, preferredTop),
+      Math.max(bounds.top, bounds.bottom - popupRect.height)
+    );
+
+    wrapper.style.left = `${left}px`;
+    wrapper.style.top = `${top}px`;
+  };
+
   const closeHandler = event => {
     if (!wrapper.contains(event.target)) {
-      wrapper.remove();
-
-      document.removeEventListener(
-        'click',
-        closeHandler
-      );
+      close();
     }
   };
 
   select.onchange = () => {
     const value = select.value;
-
-    wrapper.remove();
-
-    document.removeEventListener(
-      'click',
-      closeHandler
-    );
-
-    setTimeout(() => {
-      callback(value);
-    }, 0);
+    close();
+    setTimeout(() => callback(value), 0);
   };
-
-  setTimeout(() => {
-    document.addEventListener(
-      'click',
-      closeHandler
-    );
-  }, 0);
 
   select.onkeydown = event => {
     if (event.key === 'Escape') {
-      wrapper.remove();
-
-      document.removeEventListener(
-        'click',
-        closeHandler
-      );
+      close();
     }
   };
 
-  wrapper.appendChild(select);
-  document.body.appendChild(wrapper);
+  reposition();
 
-  const rect = cell.getBoundingClientRect();
-
-  let left = rect.left;
-  let top = rect.bottom + 2;
-
-  const wrapperHeight =
-    select.size * 24 + 20;
-
-  if (left + 180 > window.innerWidth) {
-    left = window.innerWidth - 180 - 5;
-  }
-
-  if (left < 5) {
-    left = 5;
-  }
-
-  if (top + wrapperHeight > window.innerHeight) {
-    top = rect.top - wrapperHeight - 2;
-  }
-
-  if (top < 5) {
-    top = 5;
-  }
-
-  wrapper.style.left = `${left}px`;
-  wrapper.style.top = `${top}px`;
+  window.addEventListener('resize', reposition);
+  window.addEventListener('scroll', reposition, true);
+  setTimeout(() => {
+    if (closed) return;
+    document.addEventListener('click', closeHandler);
+  }, 0);
 
   setTimeout(() => {
-    select.focus();
+    if (!closed) select.focus();
   }, 50);
 }
 
@@ -143,11 +200,14 @@ function showCenteredSelect(
   options,
   callback
 ) {
-  const oldSelect =
-    document.querySelector('.inline-select');
+  const oldSelect = document.querySelector('.inline-select');
 
   if (oldSelect) {
-    oldSelect.remove();
+    if (typeof oldSelect.__close === 'function') {
+      oldSelect.__close();
+    } else {
+      oldSelect.remove();
+    }
   }
 
   const wrapper = document.createElement('div');
@@ -263,20 +323,146 @@ function showCenteredSelect(
 
 function hideMenu() {
   if (currentMenu) {
-    currentMenu.remove();
+    const menu = currentMenu;
     currentMenu = null;
+
+    if (typeof menu.__cleanup === 'function') {
+      menu.__cleanup();
+    }
+
+    menu.remove();
   }
 }
 
-function showOperatorMenu(event, name) {
+function positionContextMenu(menu, anchor) {
+  const gap = 4;
+  const viewportPadding = 8;
+  const matrixContainer = anchor.closest('.matrix-container');
+  const preferredWidth = menu.getBoundingClientRect().width;
+
+  const getVisibleBounds = () => {
+    const containerRect = matrixContainer?.getBoundingClientRect();
+
+    return {
+      left: Math.max(viewportPadding, containerRect?.left ?? 0),
+      top: Math.max(viewportPadding, containerRect?.top ?? 0),
+      right: Math.min(
+        window.innerWidth - viewportPadding,
+        containerRect?.right ?? window.innerWidth - viewportPadding
+      ),
+      bottom: Math.min(
+        window.innerHeight - viewportPadding,
+        containerRect?.bottom ?? window.innerHeight - viewportPadding
+      )
+    };
+  };
+
+  const closeIfCurrent = () => {
+    if (currentMenu === menu) {
+      hideMenu();
+    } else if (typeof menu.__cleanup === 'function') {
+      menu.__cleanup();
+      menu.remove();
+    }
+  };
+
+  const reposition = () => {
+    if (!anchor.isConnected || !menu.isConnected) {
+      closeIfCurrent();
+      return;
+    }
+
+    const anchorRect = anchor.getBoundingClientRect();
+    const bounds = getVisibleBounds();
+    const anchorVisible =
+      anchorRect.right > bounds.left &&
+      anchorRect.left < bounds.right &&
+      anchorRect.bottom > bounds.top &&
+      anchorRect.top < bounds.bottom;
+
+    if (
+      !anchorVisible ||
+      bounds.right <= bounds.left ||
+      bounds.bottom <= bounds.top
+    ) {
+      closeIfCurrent();
+      return;
+    }
+
+    const availableWidth = Math.max(1, bounds.right - bounds.left);
+    menu.style.width = `${Math.min(preferredWidth, availableWidth)}px`;
+    menu.style.minWidth = `${Math.min(preferredWidth, availableWidth)}px`;
+    menu.style.maxHeight = '';
+    menu.style.overflowY = '';
+    menu.style.boxSizing = 'border-box';
+
+    const naturalRect = menu.getBoundingClientRect();
+    const spaceBelow = Math.max(0, bounds.bottom - anchorRect.bottom - gap);
+    const spaceAbove = Math.max(0, anchorRect.top - bounds.top - gap);
+    const opensBelow =
+      naturalRect.height <= spaceBelow || spaceBelow >= spaceAbove;
+    const availableHeight = opensBelow ? spaceBelow : spaceAbove;
+
+    if (naturalRect.height > availableHeight) {
+      menu.style.maxHeight = `${Math.max(1, availableHeight)}px`;
+      menu.style.overflowY = 'auto';
+    }
+
+    const menuRect = menu.getBoundingClientRect();
+    const left = Math.min(
+      Math.max(bounds.left, anchorRect.left),
+      Math.max(bounds.left, bounds.right - menuRect.width)
+    );
+    const preferredTop = opensBelow
+      ? anchorRect.bottom + gap
+      : anchorRect.top - menuRect.height - gap;
+    const top = Math.min(
+      Math.max(bounds.top, preferredTop),
+      Math.max(bounds.top, bounds.bottom - menuRect.height)
+    );
+
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+  };
+
+  menu.__cleanup = () => {
+    window.removeEventListener('resize', reposition);
+    window.removeEventListener('scroll', reposition, true);
+  };
+
+  reposition();
+  window.addEventListener('resize', reposition);
+  window.addEventListener('scroll', reposition, true);
+}
+
+function showOperatorMenu(event, name, index) {
   event.stopPropagation();
   hideMenu();
+
+  const anchor = event.currentTarget || event.target;
 
   const menu = document.createElement('div');
 
   menu.className = 'context-menu';
 
+  const operatorIndex = Number.isInteger(index)
+    ? index
+    : operators.indexOf(name);
+  const canMoveLeft = operatorIndex > 0;
+  const canMoveRight =
+    operatorIndex !== -1 && operatorIndex < operators.length - 1;
+
   menu.innerHTML = `
+    <div class="${canMoveLeft ? '' : 'disabled'}"
+      ${canMoveLeft ? `onclick="moveOperator(${operatorIndex}, -1);hideMenu();"` : 'aria-disabled="true"'}>
+      ◀ Переместить влево
+    </div>
+
+    <div class="${canMoveRight ? '' : 'disabled'}"
+      ${canMoveRight ? `onclick="moveOperator(${operatorIndex}, 1);hideMenu();"` : 'aria-disabled="true"'}>
+      ▶ Переместить вправо
+    </div>
+
     <div onclick="editOperator('${name}');hideMenu();">
       ✏️ Редактировать
     </div>
@@ -289,30 +475,41 @@ function showOperatorMenu(event, name) {
     </div>
   `;
 
-  menu.style.left = `${event.clientX}px`;
-  menu.style.top = `${event.clientY}px`;
+  menu.style.position = 'fixed';
 
   document.body.appendChild(menu);
   currentMenu = menu;
-
-  setTimeout(() => {
-    document.addEventListener(
-      'click',
-      hideMenu,
-      { once: true }
-    );
-  }, 0);
+  positionContextMenu(menu, anchor);
 }
 
-function showPostMenu(event, name) {
+function showPostMenu(event, name, index) {
   event.stopPropagation();
   hideMenu();
+
+  const anchor = event.currentTarget || event.target;
 
   const menu = document.createElement('div');
 
   menu.className = 'context-menu';
 
+  const postIndex = Number.isInteger(index)
+    ? index
+    : posts.indexOf(name);
+  const canMoveUp = postIndex > 0;
+  const canMoveDown =
+    postIndex !== -1 && postIndex < posts.length - 1;
+
   menu.innerHTML = `
+    <div class="${canMoveUp ? '' : 'disabled'}"
+      ${canMoveUp ? `onclick="movePost(${postIndex}, -1);hideMenu();"` : 'aria-disabled="true"'}>
+      ▲ Переместить вверх
+    </div>
+
+    <div class="${canMoveDown ? '' : 'disabled'}"
+      ${canMoveDown ? `onclick="movePost(${postIndex}, 1);hideMenu();"` : 'aria-disabled="true"'}>
+      ▼ Переместить вниз
+    </div>
+
     <div onclick="editPost('${name}');hideMenu();">
       ✏️ Редактировать
     </div>
@@ -325,19 +522,11 @@ function showPostMenu(event, name) {
     </div>
   `;
 
-  menu.style.left = `${event.clientX}px`;
-  menu.style.top = `${event.clientY}px`;
+  menu.style.position = 'fixed';
 
   document.body.appendChild(menu);
   currentMenu = menu;
-
-  setTimeout(() => {
-    document.addEventListener(
-      'click',
-      hideMenu,
-      { once: true }
-    );
-  }, 0);
+  positionContextMenu(menu, anchor);
 }
 
 document.addEventListener('click', event => {
@@ -353,7 +542,13 @@ document.addEventListener('click', event => {
 
 function openTab(event, id) {
     // Закрываем открытые всплывающие окна выбора
-  document.querySelectorAll('.inline-select').forEach(el => el.remove());
+  document.querySelectorAll('.inline-select').forEach(el => {
+    if (typeof el.__close === 'function') {
+      el.__close();
+    } else {
+      el.remove();
+    }
+  });
   
   document
     .querySelectorAll('.tab')

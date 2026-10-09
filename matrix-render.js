@@ -121,7 +121,7 @@ function renderMatrix() {
         colspan="2"
         data-operator-index="${index}"
         style="cursor:pointer;"
-        onclick="showOperatorMenu(event, '${operator}')"
+        onclick="showOperatorMenu(event, '${operator}', ${index})"
       >${operator}</th>
     `).join('') +
 
@@ -231,7 +231,7 @@ function renderMatrix() {
     tr.innerHTML = `
       <td
         style="cursor:pointer;${postBackground}"
-        onclick="showPostMenu(event, '${postName}')"
+        onclick="showPostMenu(event, '${postName}', ${r})"
       >${postName}</td>
     `;
 
@@ -812,6 +812,7 @@ function renderMatrix() {
 
   updateStatsCard();
   saveState();
+
 }
 
 function setupMatrixHoverHighlight() {

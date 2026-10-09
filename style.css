@@ -1194,6 +1194,16 @@ td:first-child {
   background: #f1f5f9;
 }
 
+.context-menu div.disabled {
+  color: #94a3b8;
+  cursor: default;
+  pointer-events: none;
+}
+
+.context-menu div.disabled:hover {
+  background: transparent;
+}
+
 .context-menu div.danger {
   color: #ef4444;
 }
