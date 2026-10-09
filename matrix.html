@@ -378,61 +378,51 @@
   </label>
 
   <div class="stats-date-filter">
-    <button
-      id="statsDateFilterButton"
-      class="btn-small"
-      type="button"
-      aria-expanded="false"
-      aria-controls="statsDateFilterPanel"
-      onclick="toggleStatsDateFilter()"
-    >
-      📅 Период дат
-    </button>
+  <button
+    id="statsDateFilterButton"
+    class="btn-small"
+    type="button"
+    aria-expanded="false"
+    aria-controls="statsDateFilterPanel"
+    onclick="toggleStatsDateFilter()"
+  >
+    📅 Период дат
+  </button>
 
-    <div
-      id="statsDateFilterPanel"
-      class="stats-date-filter-panel"
-      hidden
-    >
-      <label class="stats-date-control">
-        <span>Дата от</span>
+  <div
+    id="statsDateFilterPanel"
+    class="stats-date-filter-panel"
+    hidden
+  >
+    <label class="stats-date-control">
+      <span>Дата от</span>
+      <div id="statsDateFrom"></div>
+    </label>
 
-        <input
-          id="statsDateFrom"
-          type="date"
-          onblur="syncStatsDateRangeInputs()"
-        >
-      </label>
+    <label class="stats-date-control">
+      <span>Дата до</span>
+      <div id="statsDateTo"></div>
+    </label>
 
-      <label class="stats-date-control">
-        <span>Дата до</span>
+    <div class="stats-date-actions">
+      <button
+        class="btn-small"
+        type="button"
+        onclick="applyStatsDateRange()"
+      >
+        Применить
+      </button>
 
-        <input
-          id="statsDateTo"
-          type="date"
-          onblur="syncStatsDateRangeInputs()"
-        >
-      </label>
-
-      <div class="stats-date-actions">
-        <button
-          class="btn-small"
-          type="button"
-          onclick="applyStatsDateRange()"
-        >
-          Применить
-        </button>
-
-        <button
-          class="btn-small"
-          type="button"
-          onclick="resetStatsDateRange()"
-        >
-          Сбросить
-        </button>
-      </div>
+      <button
+        class="btn-small"
+        type="button"
+        onclick="resetStatsDateRange()"
+      >
+        Сбросить
+      </button>
     </div>
   </div>
+</div>
   </div>
 
 </div>

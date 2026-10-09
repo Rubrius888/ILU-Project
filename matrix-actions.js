@@ -75,6 +75,20 @@ function cyclePostStatus(row, col) {
       // Снятие оператора с поста.
       if (newVal === '') {
         attendanceData[row][col] = '';
+
+        const trainingRecordsChanged =
+          typeof clearActiveTrainingRecordsForPlacement === 'function' &&
+          clearActiveTrainingRecordsForPlacement(row, col);
+
+        // Статус обучения удалён из матрицы — сразу обновляем журнал
+        // обучения, не затрагивая историческую запись расстановки.
+        if (
+          trainingRecordsChanged &&
+          typeof renderTrainingTable === 'function'
+        ) {
+          renderTrainingTable();
+        }
+
         renderMatrix();
         return;
       }
@@ -230,20 +244,11 @@ function cycleLevel(row, col) {
     }
 
     // Очистка уровня означает, что оператор больше не закреплён
-    // за этим постом. Убираем и статус постановки, и незавершённое
-    // обучение по этой связке «пост + оператор».
+    // за этим постом. Убираем статус постановки и незавершённое
+    // обучение, а историческую запись расстановки сохраняем для
+    // ручного удаления из журнала.
     if (newVal === '') {
       attendanceData[row][col] = '';
-
-      const today = new Date().toLocaleDateString('ru-RU');
-
-      placementLog = placementLog.filter(entry =>
-        !(
-          entry.date === today &&
-          entry.opName === operators[col] &&
-          entry.postName === posts[row]
-        )
-      );
 
       if (Array.isArray(trainingRecords)) {
         trainingRecords = trainingRecords.filter(record =>

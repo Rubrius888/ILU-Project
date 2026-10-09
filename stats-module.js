@@ -438,25 +438,46 @@ function getSelectedStatsPeriod() {
   return select?.value || '30';
 }
 
+let statsDateFields = null;
+
+function ensureStatsDateFields() {
+  if (statsDateFields) return statsDateFields;
+
+  const fromHost = document.getElementById('statsDateFrom');
+  const toHost = document.getElementById('statsDateTo');
+
+  if (!fromHost || !toHost) return null;
+
+  const from = createDateField({ label: 'Дата от' });
+  const to = createDateField({ label: 'Дата до' });
+
+  fromHost.replaceChildren(from.element);
+  toHost.replaceChildren(to.element);
+  statsDateFields = { from, to };
+
+  from.onChange(syncStatsDateRangeInputs);
+  to.onChange(syncStatsDateRangeInputs);
+
+  return statsDateFields;
+}
+
 function getStatsDateRange() {
+  const fields = ensureStatsDateFields();
   return {
-    from: document.getElementById('statsDateFrom')?.value || '',
-    to: document.getElementById('statsDateTo')?.value || ''
+    from: fields?.from.getValue() || '',
+    to: fields?.to.getValue() || ''
   };
 }
 
 function syncStatsDateRangeInputs() {
-  const from = document.getElementById('statsDateFrom');
-  const to = document.getElementById('statsDateTo');
+  const fields = ensureStatsDateFields();
 
-  if (!from || !to) {
-    return;
-  }
-
-  syncDateInputRangeLimits(from, to);
+  if (!fields) return;
+  syncDateFieldRangeLimits(fields.from, fields.to);
 }
 
 function toggleStatsDateFilter() {
+  ensureStatsDateFields();
   const panel = document.getElementById('statsDateFilterPanel');
   const button = document.getElementById('statsDateFilterButton');
 
@@ -476,7 +497,20 @@ function toggleStatsDateFilter() {
 }
 
 function applyStatsDateRange() {
-  const { from, to } = getStatsDateRange();
+  const fields = ensureStatsDateFields();
+  const from = fields?.from.getValue() || '';
+  const to = fields?.to.getValue() || '';
+
+  if (
+    !fields ||
+    !isValidDateField(fields.from) ||
+    !isValidDateField(fields.to)
+  ) {
+    alert(
+      'Укажите корректные даты в формате ДД.ММ.ГГГГ. Год должен содержать 4 цифры.'
+    );
+    return;
+  }
 
   if (from && to && from > to) {
     alert('Дата «до» не может быть раньше даты «от».');
@@ -488,11 +522,10 @@ function applyStatsDateRange() {
 }
 
 function resetStatsDateRange() {
-  const from = document.getElementById('statsDateFrom');
-  const to = document.getElementById('statsDateTo');
+  const fields = ensureStatsDateFields();
 
-  if (from) from.value = '';
-  if (to) to.value = '';
+  fields?.from.setValue('');
+  fields?.to.setValue('');
 
   syncStatsDateRangeInputs();
   renderStatsDashboard();

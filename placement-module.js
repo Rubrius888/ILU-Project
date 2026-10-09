@@ -236,6 +236,12 @@ function placementDateToIso(value) {
   return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
 }
 
+function createPlacementDateFilterField(initialIso, label) {
+  const dateField = createDateField({ value: initialIso, label });
+  dateField.element.style.margin = '4px 0 10px';
+  return dateField;
+}
+
 function getFilteredPlacementLog() {
   return placementLog.filter(entry => {
     const date = placementDateToIso(entry.date);
@@ -321,58 +327,50 @@ function openPlacementFilterMenu(event, type) {
     fromLabel.textContent = 'Дата от';
     fromLabel.style.display = 'block';
 
-    const fromInput = document.createElement('input');
-    fromInput.type = 'date';
-    fromInput.value = placementFilters.dateFrom;
-
-    fromInput.style.cssText = `
-      width: 100%;
-      box-sizing: border-box;
-      margin: 4px 0 10px;
-      padding: 7px;
-    `;
+    const fromField = createPlacementDateFilterField(
+      placementFilters.dateFrom,
+      'Дата от'
+    );
 
     const toLabel = document.createElement('label');
     toLabel.textContent = 'Дата до';
     toLabel.style.display = 'block';
 
-    const toInput = document.createElement('input');
-    toInput.type = 'date';
-    toInput.value = placementFilters.dateTo;
-
-    toInput.style.cssText = `
-      width: 100%;
-      box-sizing: border-box;
-      margin: 4px 0 12px;
-      padding: 7px;
-    `;
-
-    const syncDateRangeLimits = () =>
-      syncDateInputRangeLimits(fromInput, toInput);
-
-    fromInput.addEventListener(
-      'blur',
-      syncDateRangeLimits
+    const toField = createPlacementDateFilterField(
+      placementFilters.dateTo,
+      'Дата до'
     );
 
-    toInput.addEventListener(
-      'blur',
-      syncDateRangeLimits
-    );
+    const syncDateRangeLimits = () => {
+      syncDateFieldRangeLimits(fromField, toField);
+    };
+
+    fromField.onChange(syncDateRangeLimits);
+    toField.onChange(syncDateRangeLimits);
 
     syncDateRangeLimits();
 
     menu.appendChild(fromLabel);
-    menu.appendChild(fromInput);
+    menu.appendChild(fromField.element);
     menu.appendChild(toLabel);
-    menu.appendChild(toInput);
+    menu.appendChild(toField.element);
 
     const buttons = createPlacementFilterButtons(
       () => {
+        const fromIso = fromField.getValue();
+        const toIso = toField.getValue();
+
+        if (!isValidDateField(fromField) || !isValidDateField(toField)) {
+          alert(
+            'Укажите корректные даты в формате ДД.ММ.ГГГГ. Год должен содержать 4 цифры.'
+          );
+          return;
+        }
+
         if (
-          fromInput.value &&
-          toInput.value &&
-          toInput.value < fromInput.value
+          fromIso &&
+          toIso &&
+          toIso < fromIso
         ) {
           alert(
             'Дата «до» не может быть раньше даты «от».'
@@ -380,8 +378,8 @@ function openPlacementFilterMenu(event, type) {
           return;
         }
 
-        placementFilters.dateFrom = fromInput.value;
-        placementFilters.dateTo = toInput.value;
+        placementFilters.dateFrom = fromIso;
+        placementFilters.dateTo = toIso;
         closePlacementFilterMenu();
         renderPlacementLog();
       },
@@ -665,8 +663,11 @@ function openPlacementEditDialog(entryId, isNew = false) {
 
   createPlacementDialog(isNew ? 'Добавление записи расстановки' : 'Редактирование записи расстановки', (modal, close) => {
     const dateLabel = placementFormLabel('Дата');
-    const dateInput = placementFormInput('date');
-    dateInput.value = placementDateToIso(entry.date);
+    const dateField = createDateField({
+      value: placementDateToIso(entry.date),
+      label: 'Дата'
+    });
+    dateField.element.style.marginBottom = '12px';
 
     const operatorLabel = placementFormLabel('Оператор');
     const operatorInput = placementFormSelect();
@@ -760,7 +761,7 @@ function openPlacementEditDialog(entryId, isNew = false) {
     const error = document.createElement('div');
     error.style.cssText = 'display:none;margin:0 0 10px;color:#dc2626;font-size:12px;';
     modal.append(
-      dateLabel, dateInput,
+      dateLabel, dateField.element,
       operatorLabel, operatorInput,
       postLabel, postInput,
       reasonLabel, reasonInput, customReasonInput,
@@ -779,7 +780,9 @@ function openPlacementEditDialog(entryId, isNew = false) {
     save.style.cssText = 'padding:9px 16px;border:0;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer;';
     cancel.onclick = close;
     save.onclick = () => {
-      if (!isCompleteDateInputValue(dateInput.value)) {
+      const dateValue = dateField.getValue();
+
+      if (!dateValue) {
         error.textContent = 'Укажите корректную дату.';
         error.style.display = 'block';
         return;
@@ -794,7 +797,7 @@ function openPlacementEditDialog(entryId, isNew = false) {
         error.style.display = 'block';
         return;
       }
-      const parts = dateInput.value.split('-');
+      const parts = dateValue.split('-');
       entry.date = `${parts[2]}.${parts[1]}.${parts[0]}`;
       entry.opName = operatorInput.value;
       entry.postName = postInput.value;

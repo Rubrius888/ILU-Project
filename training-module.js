@@ -210,17 +210,21 @@ function openTrainingRecordForm(options = {}) {
     'Дата начала обучения'
   );
 
-  const startInput = document.createElement('input');
-  startInput.type = 'date';
-  startInput.value = formatDateForInput(today);
+  const startField = createDateField({
+    value: formatDateForInput(today),
+    label: 'Дата начала обучения'
+  });
+  const startInput = startField.element;
   applyFieldStyle(startInput);
 
   const endLabel = createLabel(
     'Дата окончания обучения'
   );
 
-  const endInput = document.createElement('input');
-  endInput.type = 'date';
+  const endField = createDateField({
+    label: 'Дата окончания обучения'
+  });
+  const endInput = endField.element;
   applyFieldStyle(endInput);
 
   const commentLabel = createLabel('Комментарий');
@@ -265,7 +269,7 @@ function openTrainingRecordForm(options = {}) {
     endInput.value =
       formatDateForInput(calculatedEndDate);
 
-    syncDateInputRangeLimits(startInput, endInput);
+    syncDateFieldRangeLimits(startField, endField);
   }
 
   function updateFormatorList() {
@@ -355,14 +359,9 @@ function openTrainingRecordForm(options = {}) {
     }
   );
 
-  startInput.addEventListener(
-    'blur',
-    updateDefaultEndDate
-  );
-
-  endInput.addEventListener(
-    'blur',
-    () => syncDateInputRangeLimits(startInput, endInput)
+  startField.onChange(updateDefaultEndDate);
+  endField.onChange(() =>
+    syncDateFieldRangeLimits(startField, endField)
   );
 
   updateFormatorList();
@@ -452,6 +451,16 @@ function openTrainingRecordForm(options = {}) {
     if (!startInput.value || !endInput.value) {
       alert(
         'Выберите даты начала и окончания обучения.'
+      );
+      return;
+    }
+
+    if (
+      !isValidDateField(startField, false) ||
+      !isValidDateField(endField, false)
+    ) {
+      alert(
+        'Введите корректные даты в формате ДД.ММ.ГГГГ. Год должен содержать 4 цифры.'
       );
       return;
     }
@@ -706,6 +715,32 @@ function getWeekNumber(date) {
   return Math.ceil((days + startOfYear.getDay() + 1) / 7);
 }
 
+// Удаляет только незавершённые записи обучения для связки
+// «оператор — пост», когда обучение снято непосредственно в матрице.
+// Завершённая история обучения при этом сохраняется.
+function clearActiveTrainingRecordsForPlacement(row, column) {
+  if (!Array.isArray(trainingRecords)) {
+    return false;
+  }
+
+  const post = posts[row];
+  const operator = operators[column];
+  const nextRecords = trainingRecords.filter(record =>
+    !(
+      record.post === post &&
+      record.op === operator &&
+      record.status !== 'Завершено'
+    )
+  );
+
+  const changed = nextRecords.length !== trainingRecords.length;
+  if (changed) {
+    trainingRecords = nextRecords;
+  }
+
+  return changed;
+}
+
 function clearTrainingPlacementIfNeeded(record) {
   if (
     !record ||
@@ -839,6 +874,10 @@ function closeTrainingFilterMenu(event) {
 
 function trainingDateToIso(value) {
   if (!value || value === '—') {
+    return '';
+  }
+
+  if (!isCompleteRussianDateValue(String(value).trim())) {
     return '';
   }
 
@@ -1036,44 +1075,29 @@ function openTrainingFilterMenu(event, type) {
     fromLabel.textContent = 'Дата от';
     fromLabel.style.display = 'block';
 
-    const fromInput = document.createElement('input');
-    fromInput.type = 'date';
-    fromInput.value = trainingFilters[fromKey];
-
-    fromInput.style.cssText = `
-      width: 100%;
-      box-sizing: border-box;
-      margin: 4px 0 10px;
-      padding: 7px;
-    `;
+    const fromField = createDateField({
+      value: trainingFilters[fromKey],
+      label: 'Дата от'
+    });
+    const fromInput = fromField.element;
+    fromInput.style.margin = '4px 0 10px';
 
     const toLabel = document.createElement('label');
     toLabel.textContent = 'Дата до';
     toLabel.style.display = 'block';
 
-    const toInput = document.createElement('input');
-    toInput.type = 'date';
-    toInput.value = trainingFilters[toKey];
-
-    toInput.style.cssText = `
-      width: 100%;
-      box-sizing: border-box;
-      margin: 4px 0 12px;
-      padding: 7px;
-    `;
+    const toField = createDateField({
+      value: trainingFilters[toKey],
+      label: 'Дата до'
+    });
+    const toInput = toField.element;
+    toInput.style.margin = '4px 0 12px';
 
     const syncDateRangeLimits = () =>
-      syncDateInputRangeLimits(fromInput, toInput);
+      syncDateFieldRangeLimits(fromField, toField);
 
-    fromInput.addEventListener(
-      'blur',
-      syncDateRangeLimits
-    );
-
-    toInput.addEventListener(
-      'blur',
-      syncDateRangeLimits
-    );
+    fromField.onChange(syncDateRangeLimits);
+    toField.onChange(syncDateRangeLimits);
 
     syncDateRangeLimits();
 
@@ -1086,6 +1110,16 @@ function openTrainingFilterMenu(event, type) {
       createTrainingFilterButtons(
         () => {
           if (
+            !isValidDateField(fromField) ||
+            !isValidDateField(toField)
+          ) {
+            alert(
+              'Укажите корректные даты в формате ДД.ММ.ГГГГ. Год должен содержать 4 цифры.'
+            );
+            return;
+          }
+
+          if (
             fromInput.value &&
             toInput.value &&
             toInput.value < fromInput.value
@@ -1096,8 +1130,8 @@ function openTrainingFilterMenu(event, type) {
             return;
           }
 
-          trainingFilters[fromKey] = fromInput.value;
-          trainingFilters[toKey] = toInput.value;
+          trainingFilters[fromKey] = fromField.getValue();
+          trainingFilters[toKey] = toField.getValue();
 
           closeTrainingFilterMenu();
           renderTrainingTable();
@@ -1473,8 +1507,105 @@ function renderTrainingTable() {
     .join('');
 }
 
+function showTrainingDateEditor(currentValue, onSave) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position: fixed;
+    inset: 0;
+    z-index: 10001;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(15, 23, 42, 0.48);
+  `;
+
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    width: min(360px, calc(100vw - 32px));
+    box-sizing: border-box;
+    padding: 20px;
+    border-radius: 12px;
+    background: #ffffff;
+    box-shadow: 0 20px 60px rgba(0,0,0,.28);
+  `;
+
+  const title = document.createElement('h3');
+  title.textContent = 'Дата валидации';
+  title.style.cssText = 'margin:0 0 14px;color:#0f172a;';
+
+  const field = createDateField({
+    value: trainingDateToIso(currentValue),
+    label: 'Дата валидации'
+  });
+  field.element.style.marginBottom = '14px';
+
+  const error = document.createElement('div');
+  error.style.cssText = 'display:none;margin:0 0 10px;color:#dc2626;font-size:12px;';
+
+  const buttons = document.createElement('div');
+  buttons.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;';
+
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.textContent = 'Отмена';
+  cancel.style.cssText = 'padding:9px 16px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#1e293b;cursor:pointer;';
+
+  const save = document.createElement('button');
+  save.type = 'button';
+  save.textContent = 'Сохранить';
+  save.style.cssText = 'padding:9px 16px;border:0;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer;';
+
+  const close = () => {
+    document.removeEventListener('keydown', onKeyDown);
+    overlay.remove();
+  };
+
+  const onKeyDown = event => {
+    if (event.key === 'Escape') close();
+  };
+
+  cancel.onclick = close;
+  save.onclick = () => {
+    const value = field.getValue();
+
+    if (value === null) {
+      error.textContent = 'Введите корректную дату в формате ДД.ММ.ГГГГ.';
+      error.style.display = 'block';
+      return;
+    }
+
+    onSave(value ? formatInputDateToRu(value) : '—');
+    close();
+  };
+
+  buttons.append(cancel, save);
+  modal.append(title, field.element, error, buttons);
+  overlay.appendChild(modal);
+  overlay.addEventListener('mousedown', event => {
+    if (event.target === overlay) close();
+  });
+  document.addEventListener('keydown', onKeyDown);
+  document.body.appendChild(overlay);
+}
+
 function editTrainingField(index, field) {
   const record = trainingRecords[index];
+
+  if (field === 'validDate') {
+    showTrainingDateEditor(record.validDate, normalizedDate => {
+      record.validDate = normalizedDate;
+
+      if (record.status === 'Завершено') {
+        const validated = applyTrainingValidation(record);
+        renderTrainingTable();
+        if (validated) renderMatrix();
+      } else {
+        renderTrainingTable();
+      }
+    });
+    return;
+  }
 
   let label;
   let current;
@@ -1500,10 +1631,7 @@ function editTrainingField(index, field) {
     label =
       'Статус обучения (План / В процессе / Завершено)';
     current = record.status;
-  } else if (field === 'validDate') {
-    label = 'Дата валидации (ДД.ММ.ГГГГ)';
-    current = record.validDate;
-  } else if (field === 'comment') {
+  if (field === 'comment') {
     label = 'Комментарий';
     current = record.comment;
   } else {
@@ -1524,20 +1652,6 @@ function editTrainingField(index, field) {
     return;
   }
 
-  if (field === 'validDate') {
-    record.validDate = newValue.trim() || '—';
-
-    if (record.status === 'Завершено') {
-      const validated = applyTrainingValidation(record);
-
-      renderTrainingTable();
-
-      if (validated) {
-        renderMatrix();
-      }
-
-      return;
-    }
   } else if (field === 'comment') {
     record.comment = newValue.trim() || '—';
   }

@@ -18,6 +18,246 @@ function isCompleteDateInputValue(value) {
     date.getDate() === day;
 }
 
+function isCompleteRussianDateValue(value) {
+  if (
+    typeof value !== 'string' ||
+    !/^\d{2}\.\d{2}\.\d{4}$/.test(value)
+  ) {
+    return false;
+  }
+
+  const [day, month, year] = value
+    .split('.')
+    .map(Number);
+  const date = new Date(year, month - 1, day);
+
+  return date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day;
+}
+
+function isValidDateInputElement(input, allowEmpty = true) {
+  if (!input) {
+    return false;
+  }
+
+  if (input.validity?.badInput) {
+    return false;
+  }
+
+  if (!input.value) {
+    return allowEmpty;
+  }
+
+  return isCompleteDateInputValue(input.value);
+}
+
+// Контролируемое поле даты: ручной ввод разбит на сегменты ДД / ММ / ГГГГ,
+// а календарь остаётся нативным и синхронизируется с этими сегментами.
+function createDateField({ value = '', label = 'Дата' } = {}) {
+  const root = document.createElement('div');
+  root.style.cssText = `
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    box-sizing: border-box;
+    width: 100%;
+  `;
+
+  const createSegment = (placeholder, maxLength, width, segmentLabel) => {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.inputMode = 'numeric';
+    input.autocomplete = 'off';
+    input.placeholder = placeholder;
+    input.dataset.maxLength = String(maxLength);
+    input.setAttribute('aria-label', `${label}: ${segmentLabel}`);
+    input.style.cssText = `
+      width: ${width}px;
+      min-width: ${width}px;
+      box-sizing: border-box;
+      padding: 7px 4px;
+      text-align: center;
+    `;
+    return input;
+  };
+
+  const dayInput = createSegment('ДД', 2, 42, 'день');
+  const monthInput = createSegment('ММ', 2, 42, 'месяц');
+  const yearInput = createSegment('ГГГГ', 4, 64, 'год');
+  const calendarInput = document.createElement('input');
+  const calendarButton = document.createElement('button');
+
+  calendarInput.type = 'date';
+  calendarInput.tabIndex = -1;
+  calendarInput.setAttribute('aria-hidden', 'true');
+  calendarInput.style.cssText = `
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  `;
+
+  calendarButton.type = 'button';
+  calendarButton.textContent = '📅';
+  calendarButton.title = 'Выбрать дату в календаре';
+  calendarButton.setAttribute('aria-label', `${label}: календарь`);
+  calendarButton.style.cssText = `
+    width: 36px;
+    min-width: 36px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #ffffff;
+    cursor: pointer;
+  `;
+
+  const separator = text => {
+    const node = document.createElement('span');
+    node.textContent = text;
+    node.setAttribute('aria-hidden', 'true');
+    node.style.color = '#64748b';
+    return node;
+  };
+
+  root.append(
+    dayInput,
+    separator('.'),
+    monthInput,
+    separator('.'),
+    yearInput,
+    calendarButton,
+    calendarInput
+  );
+
+  const listeners = [];
+
+  const notify = () => {
+    listeners.forEach(listener => listener());
+  };
+
+  const sanitizeSegment = input => {
+    const digits = input.value.replace(/\D/g, '');
+    const maxLength = Number(input.dataset.maxLength);
+    input.dataset.overflow = digits.length > maxLength ? 'true' : 'false';
+    input.value = digits.slice(0, maxLength);
+  };
+
+  const segments = [dayInput, monthInput, yearInput];
+
+  segments.forEach((input, index) => {
+    input.addEventListener('input', () => {
+      sanitizeSegment(input);
+      const iso = getValue();
+      if (iso) calendarInput.value = iso;
+      if (
+        input.value.length === Number(input.dataset.maxLength) &&
+        segments[index + 1]
+      ) {
+        segments[index + 1].focus();
+      }
+      notify();
+    });
+  });
+
+  calendarInput.addEventListener('change', () => {
+    setValue(calendarInput.value);
+    notify();
+  });
+
+  calendarButton.addEventListener('click', () => {
+    try {
+      if (typeof calendarInput.showPicker === 'function') {
+        calendarInput.showPicker();
+        return;
+      }
+      calendarInput.click();
+    } catch (error) {
+      calendarInput.click();
+    }
+  });
+
+  function getValue() {
+    const day = dayInput.value;
+    const month = monthInput.value;
+    const year = yearInput.value;
+
+    if (!day && !month && !year) return '';
+    if (
+      dayInput.dataset.overflow === 'true' ||
+      monthInput.dataset.overflow === 'true' ||
+      yearInput.dataset.overflow === 'true'
+    ) {
+      return null;
+    }
+    if (!/^\d{2}$/.test(day) || !/^\d{2}$/.test(month) || !/^\d{4}$/.test(year)) {
+      return null;
+    }
+
+    const iso = `${year}-${month}-${day}`;
+    return isCompleteDateInputValue(iso) ? iso : null;
+  }
+
+  function setValue(iso) {
+    const normalized = isCompleteDateInputValue(iso) ? iso : '';
+    const [year = '', month = '', day = ''] = normalized.split('-');
+    dayInput.value = day;
+    monthInput.value = month;
+    yearInput.value = year;
+    dayInput.dataset.overflow = 'false';
+    monthInput.dataset.overflow = 'false';
+    yearInput.dataset.overflow = 'false';
+    calendarInput.value = normalized;
+  }
+
+  function setRange({ min = '', max = '' } = {}) {
+    calendarInput.min = isCompleteDateInputValue(min) ? min : '';
+    calendarInput.max = isCompleteDateInputValue(max) ? max : '';
+  }
+
+  function onChange(listener) {
+    if (typeof listener === 'function') listeners.push(listener);
+  }
+
+  Object.defineProperty(root, 'value', {
+    configurable: true,
+    get: getValue,
+    set: setValue
+  });
+
+  setValue(value);
+
+  return {
+    element: root,
+    dayInput,
+    monthInput,
+    yearInput,
+    calendarInput,
+    calendarButton,
+    getValue,
+    setValue,
+    setRange,
+    onChange
+  };
+}
+
+function isValidDateField(field, allowEmpty = true) {
+  if (!field || typeof field.getValue !== 'function') return false;
+  const value = field.getValue();
+  return value === '' ? allowEmpty : Boolean(value);
+}
+
+function syncDateFieldRangeLimits(fromField, toField) {
+  if (!fromField || !toField) return;
+  const from = fromField.getValue();
+  const to = toField.getValue();
+  fromField.setRange({ max: to || '' });
+  toField.setRange({ min: from || '' });
+}
+
 function syncDateInputRangeLimits(fromInput, toInput) {
   if (!fromInput || !toInput) {
     return;
