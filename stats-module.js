@@ -926,14 +926,16 @@ function getStatsRiskRows() {
           }
         }
 
+        const isAssigned = status === '○' || status === '△';
+
+        // Обучение учитывается только для той же пары «оператор — пост»:
+        // Iкр должен сопровождаться фактическим статусом ○ или △.
         if (
           !isExternalOperator &&
-          level === 'Iкр'
+          level === 'Iкр' &&
+          isAssigned
         ) {
           hasIkr = true;
-        }
-
-        if (!isExternalOperator && status === '△') {
           hasTraining = true;
         }
 
