@@ -1164,15 +1164,125 @@ function applyAutomaticRotation() {
 
 window.applyAutomaticRotation = applyAutomaticRotation;
 
+let activePlanGeneration = null;
+let activePlanGenerationOverlay = null;
+let activePlanGenerationButtons = [];
+
+function showPlanGenerationIndicator(type) {
+  const isRotation = type === 'rotation';
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position:fixed;inset:0;z-index:20000;display:flex;align-items:center;
+    justify-content:center;padding:16px;background:rgba(15,23,42,.32);
+  `;
+  overlay.setAttribute('role', 'status');
+  overlay.setAttribute('aria-live', 'polite');
+
+  const panel = document.createElement('div');
+  panel.style.cssText = `
+    display:flex;align-items:center;gap:12px;max-width:420px;
+    box-sizing:border-box;padding:18px 20px;border-radius:10px;
+    background:#fff;color:#0f172a;box-shadow:0 16px 40px rgba(15,23,42,.22);
+    font-family:Arial,sans-serif;font-size:14px;font-weight:600;
+  `;
+
+  const spinner = document.createElement('span');
+  spinner.setAttribute('aria-hidden', 'true');
+  spinner.style.cssText = `
+    width:18px;height:18px;flex:0 0 18px;box-sizing:border-box;
+    border:3px solid #cbd5e1;border-top-color:${isRotation ? '#16a34a' : '#2563eb'};
+    border-radius:50%;animation:iluPlanGenerationSpin .8s linear infinite;
+  `;
+
+  const message = document.createElement('span');
+  message.textContent = isRotation
+    ? 'Формирование плана ротации. Пожалуйста, подождите…'
+    : 'Формирование плана обучения. Пожалуйста, подождите…';
+  panel.append(spinner, message);
+  overlay.appendChild(panel);
+
+  if (!document.getElementById('iluPlanGenerationStyles')) {
+    const styles = document.createElement('style');
+    styles.id = 'iluPlanGenerationStyles';
+    styles.textContent = '@keyframes iluPlanGenerationSpin { to { transform: rotate(360deg); } }';
+    document.head.appendChild(styles);
+  }
+
+  activePlanGenerationButtons = Array.from(
+    document.querySelectorAll(
+      'button[onclick*="openDevelopmentGenerationDialog"], ' +
+      'button[onclick*="openRotationGenerationDialog"]'
+    )
+  ).map(button => ({
+    button,
+    disabled: button.disabled
+  }));
+  activePlanGenerationButtons.forEach(({ button }) => {
+    button.disabled = true;
+    button.setAttribute('aria-disabled', 'true');
+  });
+
+  document.body.appendChild(overlay);
+  activePlanGenerationOverlay = overlay;
+}
+
+function hidePlanGenerationIndicator() {
+  activePlanGenerationButtons.forEach(({ button, disabled }) => {
+    button.disabled = disabled;
+    if (disabled) button.setAttribute('aria-disabled', 'true');
+    else button.removeAttribute('aria-disabled');
+  });
+  activePlanGenerationButtons = [];
+
+  if (activePlanGenerationOverlay) {
+    activePlanGenerationOverlay.remove();
+    activePlanGenerationOverlay = null;
+  }
+}
+
+function runPlanGeneration(type, task) {
+  if (activePlanGeneration) return false;
+
+  activePlanGeneration = type;
+  showPlanGenerationIndicator(type);
+
+  const execute = () => {
+    try {
+      task();
+    } catch (error) {
+      console.error(`Ошибка формирования плана ${type}:`, error);
+      alert(
+        type === 'rotation'
+          ? 'Не удалось сформировать план ротации.'
+          : 'Не удалось сформировать план обучения.'
+      );
+    } finally {
+      activePlanGeneration = null;
+      hidePlanGenerationIndicator();
+    }
+  };
+
+  // Первый кадр позволяет браузеру отрисовать overlay. Расчёт начинается
+  // только на следующем кадре и не получает искусственной задержки после него.
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => requestAnimationFrame(execute));
+  } else {
+    setTimeout(execute, 0);
+  }
+
+  return true;
+}
+
 function wrapPlanGenerator(type, functionName, tableId, color) {
   const originalFunction = window[functionName];
   if (typeof originalFunction !== 'function') return;
   window[functionName] = function () {
-    const result = originalFunction.apply(this, arguments);
-    capturePlan(type, tableId);
-    restorePlan(type, tableId, color);
-    if (type === 'rotation') applyAutomaticRotation();
-    return result;
+    return runPlanGeneration(type, () => {
+      originalFunction.apply(this, arguments);
+      capturePlan(type, tableId);
+      restorePlan(type, tableId, color);
+      if (type === 'rotation') applyAutomaticRotation();
+    });
   };
 }
 
