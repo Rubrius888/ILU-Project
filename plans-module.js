@@ -435,10 +435,14 @@ function generateDevelopmentPlan() {
   let generationStoppedByCalendar = false;
   let stopReason = null;
 
+  const currentDate = new Date();
+  const isCurrentMonth = year === currentDate.getFullYear() && month === currentDate.getMonth();
+  const generationStartDay = isCurrentMonth ? currentDate.getDate() - 1 : 0;
+
   for (const assign of planWithDays) {
     const opName = operators[assign.opIndex];
     const selectedDays = [];
-    for (let d = 0; d < daysInMonth && selectedDays.length < assign.days; d++) {
+    for (let d = generationStartDay; d < daysInMonth && selectedDays.length < assign.days; d++) {
       const dayOfWeek = new Date(year, month, d + 1).getDay();
       if (dayOfWeek === 0 || dayOfWeek === 6) continue;
       if ((dailyCount[d] || 0) >= maxConcurrentTrainings) continue;
@@ -966,7 +970,10 @@ function generateRotationPlan() {
     isEligibleOperator(opIndex) && isRotationLevel(data[postIndex]?.[opIndex]);
   const cloneState = state => [...state];
   const workingDays = [];
-  for (let day = 0; day < daysInMonth; day++) {
+  const currentDate = new Date();
+  const isCurrentMonth = year === currentDate.getFullYear() && month === currentDate.getMonth();
+  const generationStartDay = isCurrentMonth ? currentDate.getDate() - 1 : 0;
+  for (let day = generationStartDay; day < daysInMonth; day++) {
     const weekday = new Date(year, month, day + 1).getDay();
     if (weekday !== 0 && weekday !== 6) workingDays.push(day);
   }

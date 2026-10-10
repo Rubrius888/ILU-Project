@@ -136,6 +136,46 @@ function loadPlans() {
   }
 }
 
+function mergeCurrentMonthHistory(type, previous, rows, year, month) {
+  const today = new Date();
+  if (year !== today.getFullYear() || month !== today.getMonth() || !previous) return rows;
+  if (!Array.isArray(previous.posts) || !Array.isArray(previous.rows)) {
+    throw new Error('Структура сохранённого плана повреждена.');
+  }
+  const oldPosts = previous.posts.map(String);
+  const currentPosts = posts.map(String);
+  const unique = values => new Set(values).size === values.length;
+  if (!unique(oldPosts) || !unique(currentPosts)) {
+    throw new Error('Невозможно однозначно сопоставить посты сохранённого плана.');
+  }
+  const oldRows = new Map();
+  oldPosts.forEach((post, index) => {
+    const row = previous.rows[index];
+    if (!Array.isArray(row)) throw new Error('Строка сохранённого плана повреждена.');
+    oldRows.set(post, row);
+  });
+  return rows.map((row, rowIndex) => {
+    const oldRow = oldRows.get(currentPosts[rowIndex]);
+    if (!oldRow) return row;
+    const merged = [...row];
+    const lastHistoricalColumn = Math.min(today.getDate(), merged.length - 1, oldRow.length - 1);
+    for (let column = 1; column <= lastHistoricalColumn; column++) {
+      merged[column] = oldRow[column];
+    }
+    return merged;
+  });
+}
+
+function validateNoActiveRotationChain(previous, year, month) {
+  if (!previous || !Array.isArray(previous.chains)) return;
+  const today = new Date();
+  if (year !== today.getFullYear() || month !== today.getMonth()) return;
+  const day = today.getDate();
+  if (previous.chains.some(chain => Number(chain.startDay) < day && Number(chain.endDay) >= day)) {
+    throw new Error('План ротации содержит активную цепочку, начавшуюся до сегодняшней даты. Исходный план сохранён без изменений.');
+  }
+}
+
 function capturePlan(type, tableId) {
   const table = document.getElementById(tableId);
   if (!table || !table.tHead || !table.tBodies[0]) return;
@@ -144,7 +184,7 @@ function capturePlan(type, tableId) {
     table.tHead.rows[0]?.cells || [],
     cell => cell.innerText
   );
-  const rows = Array.from(
+  let rows = Array.from(
     table.tBodies[0].rows,
     row => Array.from(row.cells, cell => cell.textContent)
   );
@@ -155,6 +195,7 @@ function capturePlan(type, tableId) {
     const month = viewDate.getMonth();
     const key = planMonthKey(year, month);
     const previous = getDevelopmentSnapshot(year, month);
+    rows = mergeCurrentMonthHistory(type, previous, rows, year, month);
     const generationMeta = window.lastDevelopmentGenerationMeta;
     const meta = generationMeta?.year === year && generationMeta?.month === month
       ? generationMeta
@@ -188,6 +229,8 @@ function capturePlan(type, tableId) {
     const month = viewDate.getMonth();
     const key = planMonthKey(year, month);
     const previous = getRotationSnapshot(year, month);
+    validateNoActiveRotationChain(previous, year, month);
+    rows = mergeCurrentMonthHistory(type, previous, rows, year, month);
     const generationMeta = window.lastRotationGenerationMeta;
     const generatedForMonth = generationMeta?.year === year && generationMeta?.month === month;
     const meta = generatedForMonth ? generationMeta : (previous || {});
@@ -1339,11 +1382,32 @@ function wrapPlanGenerator(type, functionName, tableId, color) {
   const originalFunction = window[functionName];
   if (typeof originalFunction !== 'function') return;
   window[functionName] = function () {
+    const table = document.getElementById(tableId);
+    const tableBackup = table ? {
+      head: table.tHead?.innerHTML || '',
+      body: table.tBodies[0]?.innerHTML || ''
+    } : null;
+    const plansBackup = JSON.parse(JSON.stringify(savedPlans));
     return runPlanGeneration(type, () => {
-      originalFunction.apply(this, arguments);
-      capturePlan(type, tableId);
-      restorePlan(type, tableId, color);
-      if (type === 'rotation') applyAutomaticRotation();
+      try {
+        const viewDate = type === 'rotation' ? getRotationViewDate() : getDevelopmentViewDate();
+        if (type === 'rotation') {
+          validateNoActiveRotationChain(getRotationSnapshot(viewDate.getFullYear(), viewDate.getMonth()), viewDate.getFullYear(), viewDate.getMonth());
+        }
+        originalFunction.apply(this, arguments);
+        capturePlan(type, tableId);
+        restorePlan(type, tableId, color);
+        if (type === 'rotation') applyAutomaticRotation();
+      } catch (error) {
+        savedPlans = plansBackup;
+        try { localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify(savedPlans)); } catch (_) {}
+        if (tableBackup && table) {
+          if (table.tHead) table.tHead.innerHTML = tableBackup.head;
+          if (table.tBodies[0]) table.tBodies[0].innerHTML = tableBackup.body;
+        }
+        restorePlan(type, tableId, color);
+        throw error;
+      }
     });
   };
 }
