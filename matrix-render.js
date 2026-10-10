@@ -7,6 +7,10 @@ function isOtherSectorOperator(index) {
 function renderMatrix() {
   const thead = document.querySelector('#iluTable thead');
   const tbody = document.querySelector('#iluTable tbody');
+  const existingTable = document.getElementById('iluTable');
+  if (existingTable?.__hideMatrixTooltip) {
+    existingTable.__hideMatrixTooltip();
+  }
   const matrixTableContainer =
     document.getElementById('matrixTableContainer');
   const emptyMatrixState =
@@ -316,7 +320,7 @@ function renderMatrix() {
           '<span class="status-marker status-marker-training" aria-label="Обучается"></span>';
       }
 
-      tdPost.title =
+      tdPost.dataset.matrixTooltip =
         `${postName}\n` +
         `${operators[c]}`;
 
@@ -353,7 +357,7 @@ function renderMatrix() {
       tdLvl.dataset.operatorIndex = c;
       tdLvl.textContent = level || '';
       tdLvl.className = 'cell';
-      tdLvl.title =
+      tdLvl.dataset.matrixTooltip =
         `${postName}\n` +
         `${operators[c]}`;
 
@@ -827,6 +831,64 @@ function setupMatrixHoverHighlight() {
 
   table.dataset.hoverBound = 'true';
 
+  const tooltip = document.createElement('div');
+  tooltip.className = 'matrix-hover-tooltip';
+  tooltip.setAttribute('role', 'tooltip');
+  tooltip.hidden = true;
+  document.body.appendChild(tooltip);
+
+  let tooltipTimer = null;
+  let tooltipCell = null;
+  let pointerX = 0;
+  let pointerY = 0;
+
+  const hideTooltip = () => {
+    if (tooltipTimer !== null) {
+      clearTimeout(tooltipTimer);
+      tooltipTimer = null;
+    }
+    tooltipCell = null;
+    tooltip.hidden = true;
+  };
+  table.__hideMatrixTooltip = hideTooltip;
+
+  const positionTooltip = () => {
+    if (tooltip.hidden) return;
+    const gap = 12;
+    const rect = tooltip.getBoundingClientRect();
+    const left = Math.min(
+      Math.max(8, pointerX + gap),
+      Math.max(8, window.innerWidth - rect.width - 8)
+    );
+    const top = Math.min(
+      Math.max(8, pointerY + gap),
+      Math.max(8, window.innerHeight - rect.height - 8)
+    );
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+  };
+
+  const showTooltip = (cell, event) => {
+    const text = cell.dataset.matrixTooltip;
+    if (!text) {
+      hideTooltip();
+      return;
+    }
+    pointerX = event.clientX;
+    pointerY = event.clientY;
+    if (tooltipCell === cell && !tooltip.hidden) return;
+    if (tooltipTimer !== null) clearTimeout(tooltipTimer);
+    tooltipCell = cell;
+    tooltip.hidden = true;
+    tooltipTimer = setTimeout(() => {
+      tooltipTimer = null;
+      if (tooltipCell !== cell || !table.contains(cell)) return;
+      tooltip.textContent = text;
+      tooltip.hidden = false;
+      positionTooltip();
+    }, 250);
+  };
+
   const clearHighlight = () => {
     table
       .querySelectorAll(
@@ -844,6 +906,9 @@ function setupMatrixHoverHighlight() {
     if (!cell || !table.contains(cell)) {
       return;
     }
+
+    if (event.relatedTarget && cell.contains(event.relatedTarget)) return;
+    showTooltip(cell, event);
 
     clearHighlight();
 
@@ -871,8 +936,13 @@ function setupMatrixHoverHighlight() {
 
   table.addEventListener(
     'mouseleave',
-    clearHighlight
+    () => {
+      clearHighlight();
+      hideTooltip();
+    }
   );
+  window.addEventListener('scroll', hideTooltip, true);
+  window.addEventListener('resize', positionTooltip);
 }
 
 // ======================== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ========================

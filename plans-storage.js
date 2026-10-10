@@ -236,6 +236,7 @@ function showMissingDevelopmentPlan(year, month) {
   table.tHead.innerHTML = '';
   table.tBodies[0].innerHTML = `<tr><td style="text-align:center;color:#94a3b8;padding:40px;">План развития за ${String(month + 1).padStart(2, '0')}.${year} не сохранён</td></tr>`;
   renderDevelopmentStatus(null);
+  highlightPlanToday('devCalendarTable', year, month);
 }
 
 function showMissingRotationPlan(year, month) {
@@ -243,6 +244,66 @@ function showMissingRotationPlan(year, month) {
   if (!table || !table.tHead || !table.tBodies[0]) return;
   table.tHead.innerHTML = '';
   table.tBodies[0].innerHTML = `<tr><td style="text-align:center;color:#94a3b8;padding:40px;">План ротации за ${String(month + 1).padStart(2, '0')}.${year} не сохранён</td></tr>`;
+  highlightPlanToday('rotCalendarTable', year, month);
+}
+
+function highlightPlanToday(tableId, planYear, planMonth) {
+  const table = document.getElementById(tableId);
+  if (!table || !table.tHead || !table.tBodies[0]) return;
+
+  table.querySelectorAll('.ilu-plan-today').forEach(cell => {
+    cell.classList.remove('ilu-plan-today');
+  });
+  table.querySelectorAll('.ilu-plan-today-header').forEach(cell => {
+    cell.classList.remove('ilu-plan-today-header');
+  });
+
+  const now = new Date();
+  if (Number(planYear) !== now.getFullYear() || Number(planMonth) !== now.getMonth()) return;
+
+  const headerCells = Array.from(table.tHead.rows[0]?.cells || []);
+  const today = now.getDate();
+  const dayColumnIndexes = headerCells
+    .map((header, index) => {
+      const firstLine = String(header.textContent || '').trim().split(/\s+/)[0];
+      return /^\d{1,2}$/.test(firstLine) && Number(firstLine) === today ? index : -1;
+    })
+    .filter(index => index >= 0);
+
+  // Только столбцы с числовым календарным заголовком считаются днями.
+  // Служебные столбцы (например, длительность обучения) не затрагиваются.
+  dayColumnIndexes.forEach(index => {
+    headerCells[index].classList.add('ilu-plan-today-header');
+    Array.from(table.tBodies[0].rows).forEach(row => {
+      if (row.cells[index]) row.cells[index].classList.add('ilu-plan-today');
+    });
+  });
+}
+
+const MONTHLY_PLANNING_REMINDER_KEY = 'ilu-monthly-planning-reminder';
+
+function showMonthlyPlanningReminder() {
+  const now = new Date();
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  if (localStorage.getItem(MONTHLY_PLANNING_REMINDER_KEY) === monthKey) return;
+  if (document.querySelector('[data-ilu-monthly-planning-reminder]')) return;
+  if (document.querySelector('[role="dialog"]')) return;
+
+  createDevelopmentPlanDialog('Напоминание о ежемесячном планировании', (modal, close) => {
+    modal.dataset.iluMonthlyPlanningReminder = 'true';
+    const text = document.createElement('p');
+    text.style.cssText = 'margin:0;color:#334155;line-height:1.5;';
+    text.textContent = 'Не забудьте сформировать план ротации операторов и план развития операторов на текущий месяц';
+    const footer = document.createElement('div');
+    footer.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;margin-top:20px;';
+    const acknowledge = planButton('Понятно', true);
+    acknowledge.onclick = () => {
+      localStorage.setItem(MONTHLY_PLANNING_REMINDER_KEY, monthKey);
+      close();
+    };
+    footer.appendChild(acknowledge);
+    modal.append(text, footer);
+  });
 }
 
 function restorePlan(type, tableId, color, explicitPlan = null) {
@@ -356,6 +417,7 @@ function restorePlan(type, tableId, color, explicitPlan = null) {
   });
 
   if (type === 'development') renderDevelopmentStatus(plan);
+  highlightPlanToday(tableId, plan.year, plan.month);
 }
 
 function updateDevelopmentMonthLabel() {
@@ -1324,6 +1386,7 @@ setTimeout(() => {
   restorePlan('development', 'devCalendarTable', '#2563eb');
   restorePlan('rotation', 'rotCalendarTable', '#16a34a');
   applyAutomaticRotation();
+  showMonthlyPlanningReminder();
 }, 0);
 
 // Проверяем дату периодически, чтобы открытое приложение переключало
