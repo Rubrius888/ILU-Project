@@ -56,6 +56,31 @@ function getPlacementReasonClass(entry) {
   }
 }
 
+function formatPlacementTime(date) {
+  return `${String(date.getHours()).padStart(2, '0')}:` +
+    `${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+function getPlacementTimeMinutes(entry) {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(
+    String(entry?.time || '')
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function getPlacementDateTimeText(entry) {
+  const time = getPlacementTimeMinutes(entry);
+
+  return time === null
+    ? entry.date
+    : `${entry.date} ${entry.time}`;
+}
+
 function normalizePlacementLog() {
   if (!Array.isArray(placementLog)) {
     placementLog = [];
@@ -83,9 +108,10 @@ function normalizePlacementLog() {
   if (changed && typeof saveState === 'function') saveState();
 }
 
-function logPlacement(opName, postName, reason = '') {
+function logPlacement(opName, postName, reason = '', lifecycle = {}) {
   const now = new Date();
   const date = now.toLocaleDateString('ru-RU');
+  const time = formatPlacementTime(now);
 
   // Автоматическая запись обучения не должна дублироваться при повторном
   // открытии или сохранении одной и той же формы обучения.
@@ -104,6 +130,7 @@ function logPlacement(opName, postName, reason = '') {
   const entry = {
     id: createPlacementId(),
     date,
+    time,
     opName,
     postName,
     reason,
@@ -111,14 +138,31 @@ function logPlacement(opName, postName, reason = '') {
     comment: ''
   };
   placementLog.push(entry);
-  saveState();
-  renderPlacementLog();
 
   if (reason) {
+    if (typeof lifecycle.onConfirm === 'function') {
+      lifecycle.onConfirm(entry);
+    }
+    saveState();
+    renderPlacementLog();
     return;
   }
 
-  openPlacementEditDialog(entry.id, true);
+  // Новая запись остаётся временной до нажатия «Сохранить».
+  openPlacementEditDialog(entry.id, true, {
+    onConfirm: () => {
+      if (typeof lifecycle.onConfirm === 'function') {
+        lifecycle.onConfirm(entry);
+      }
+    },
+    onCancel: () => {
+      placementLog = placementLog.filter(item => item.id !== entry.id);
+      if (typeof lifecycle.onCancel === 'function') {
+        lifecycle.onCancel();
+      }
+      renderPlacementLog();
+    }
+  });
 }
 
 function ensureDailyInitialPlacement() {
@@ -164,6 +208,7 @@ function ensureDailyInitialPlacement() {
     placementLog.push({
       id: createPlacementId(),
       date: today,
+      time: '06:45',
       opName,
       postName,
       status,
@@ -196,6 +241,92 @@ function getPlacementSortValue(entry, key) {
 
   return String(entry[key] || '')
     .toLocaleLowerCase('ru-RU');
+}
+
+function sortPlacementEntries(entries) {
+  const indexedEntries = entries.map((entry, index) => ({
+    entry,
+    index
+  }));
+
+  indexedEntries.sort((left, right) => {
+    const leftValue = getPlacementSortValue(
+      left.entry,
+      placementSort.key
+    );
+    const rightValue = getPlacementSortValue(
+      right.entry,
+      placementSort.key
+    );
+    const comparison =
+      leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0;
+
+    if (comparison !== 0) {
+      return placementSort.direction === 'desc'
+        ? -comparison
+        : comparison;
+    }
+
+    // Для одинаковых значений сохраняем порядок, полученный из журнала.
+    return left.index - right.index;
+  });
+
+  if (placementSort.key !== 'date') {
+    return indexedEntries.map(item => item.entry);
+  }
+
+  // Внутри одной даты сортируем только записи с известным временем.
+  // Старые записи без time остаются на своих позициях относительно друг друга
+  // и не получают искусственное значение времени.
+  let groupStart = 0;
+
+  while (groupStart < indexedEntries.length) {
+    const dateValue = getPlacementSortValue(
+      indexedEntries[groupStart].entry,
+      'date'
+    );
+    let groupEnd = groupStart + 1;
+
+    while (
+      groupEnd < indexedEntries.length &&
+      getPlacementSortValue(indexedEntries[groupEnd].entry, 'date') ===
+        dateValue
+    ) {
+      groupEnd++;
+    }
+
+    const timedPositions = [];
+    const timedEntries = [];
+
+    for (let index = groupStart; index < groupEnd; index++) {
+      if (getPlacementTimeMinutes(indexedEntries[index].entry) !== null) {
+        timedPositions.push(index);
+        timedEntries.push(indexedEntries[index]);
+      }
+    }
+
+    timedEntries.sort((left, right) => {
+      const comparison =
+        getPlacementTimeMinutes(left.entry) -
+        getPlacementTimeMinutes(right.entry);
+
+      if (comparison !== 0) {
+        return placementSort.direction === 'desc'
+          ? -comparison
+          : comparison;
+      }
+
+      return left.index - right.index;
+    });
+
+    timedPositions.forEach((position, index) => {
+      indexedEntries[position] = timedEntries[index];
+    });
+
+    groupStart = groupEnd;
+  }
+
+  return indexedEntries.map(item => item.entry);
 }
 
 function sortPlacementLog(key) {
@@ -594,7 +725,7 @@ function closePlacementDialog(overlay) {
   if (overlay) overlay.remove();
 }
 
-function createPlacementDialog(titleText, buildContent) {
+function createPlacementDialog(titleText, buildContent, lifecycle = {}) {
   const overlay = document.createElement('div');
   overlay.style.cssText = `
     position:fixed;inset:0;z-index:10000;display:flex;align-items:center;
@@ -620,7 +751,26 @@ function createPlacementDialog(titleText, buildContent) {
   modal.appendChild(header);
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
-  const close = () => closePlacementDialog(overlay);
+  let closed = false;
+  const onKeyDown = event => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    close();
+  };
+  const close = (options = {}) => {
+    if (closed) return;
+    closed = true;
+    document.removeEventListener('keydown', onKeyDown);
+
+    if (
+      !options.committed &&
+      typeof lifecycle.onCancel === 'function'
+    ) {
+      lifecycle.onCancel();
+    }
+
+    closePlacementDialog(overlay);
+  };
   closeButton.onclick = close;
   let backdropMouseDown = false;
   overlay.addEventListener('mousedown', event => {
@@ -633,6 +783,7 @@ function createPlacementDialog(titleText, buildContent) {
     backdropMouseDown = false;
     if (closeByBackdrop) close();
   });
+  document.addEventListener('keydown', onKeyDown);
   buildContent(modal, close);
   return { overlay, modal, close };
 }
@@ -657,7 +808,7 @@ function placementFormSelect() {
   return select;
 }
 
-function openPlacementEditDialog(entryId, isNew = false) {
+function openPlacementEditDialog(entryId, isNew = false, lifecycle = {}) {
   const entry = placementLog.find(item => item.id === entryId);
   if (!entry) return;
 
@@ -806,12 +957,17 @@ function openPlacementEditDialog(entryId, isNew = false) {
         ? customReasonInput.value.trim()
         : '';
       entry.comment = commentInput.value.trim();
+      if (typeof lifecycle.onConfirm === 'function') {
+        lifecycle.onConfirm(entry);
+      }
       saveState();
       renderPlacementLog();
-      close();
+      close({ committed: true });
     };
     footer.append(cancel, save);
     modal.appendChild(footer);
+  }, {
+    onCancel: isNew ? lifecycle.onCancel : undefined
   });
 }
 
@@ -1003,16 +1159,11 @@ function renderPlacementLog() {
     return;
   }
 
-  const sortedLog = [...filteredLog].sort((a, b) => {
-    const left = getPlacementSortValue(a, placementSort.key);
-    const right = getPlacementSortValue(b, placementSort.key);
-    const comparison = left < right ? -1 : left > right ? 1 : 0;
-    return placementSort.direction === 'desc' ? -comparison : comparison;
-  });
+  const sortedLog = sortPlacementEntries(filteredLog);
 
   tbody.innerHTML = sortedLog.map(entry => `
     <tr>
-      <td>${escapePlacementHtml(entry.date)}</td>
+      <td>${escapePlacementHtml(getPlacementDateTimeText(entry))}</td>
       <td>${escapePlacementHtml(entry.opName)}</td>
       <td>${escapePlacementHtml(entry.postName)}</td>
       <td class="placement-reason-cell">

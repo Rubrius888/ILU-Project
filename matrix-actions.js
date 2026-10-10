@@ -109,6 +109,58 @@ function cyclePostStatus(row, col) {
         return;
       }
 
+      const isCirclePlacement = newVal === '○';
+      const shouldPromoteIToLcr =
+        isCirclePlacement && data[row][col] === 'I';
+      const placementSnapshot = isCirclePlacement
+        ? {
+            attendanceData: attendanceData.map(item =>
+              Array.isArray(item) ? item.slice() : item
+            ),
+            operatorAttendance: Array.isArray(operatorAttendance)
+              ? operatorAttendance.slice()
+              : operatorAttendance,
+            data: data.map(item =>
+              Array.isArray(item) ? item.slice() : item
+            ),
+            trainingRecords: Array.isArray(trainingRecords)
+              ? trainingRecords.slice()
+              : trainingRecords,
+            placementLog: Array.isArray(placementLog)
+              ? placementLog.slice()
+              : placementLog
+          }
+        : null;
+
+      const restoreCirclePlacement = () => {
+        if (!placementSnapshot) return;
+
+        attendanceData = placementSnapshot.attendanceData.map(item =>
+          Array.isArray(item) ? item.slice() : item
+        );
+        operatorAttendance = Array.isArray(
+          placementSnapshot.operatorAttendance
+        )
+          ? placementSnapshot.operatorAttendance.slice()
+          : placementSnapshot.operatorAttendance;
+        data = placementSnapshot.data.map(item =>
+          Array.isArray(item) ? item.slice() : item
+        );
+        trainingRecords = Array.isArray(
+          placementSnapshot.trainingRecords
+        )
+          ? placementSnapshot.trainingRecords.slice()
+          : placementSnapshot.trainingRecords;
+        placementLog = Array.isArray(placementSnapshot.placementLog)
+          ? placementSnapshot.placementLog.slice()
+          : placementSnapshot.placementLog;
+
+        if (typeof renderTrainingTable === 'function') {
+          renderTrainingTable();
+        }
+        renderMatrix();
+      };
+
       if (isActivePlacement(newVal)) {
         const today =
           new Date().toLocaleDateString('ru-RU');
@@ -179,35 +231,38 @@ function cyclePostStatus(row, col) {
 
       attendanceData[row][col] = newVal;
 
-      // I при постановке становится Lкр.
-      if (
-        newVal === '○' &&
-        data[row][col] === 'I'
-      ) {
-        data[row][col] = 'Lкр';
-
-        // При автоматическом переходе I -> Lкр
-        // сразу создаём соответствующую запись в журнале обучения.
-        if (
-          operatorRoles[col] !== 'ДС' &&
-          typeof createAutomaticLcrTrainingRecord === 'function'
-        ) {
-          createAutomaticLcrTrainingRecord(row, col);
-        }
-      }
-
-      if (newVal === '○') {
+      if (isCirclePlacement) {
         logPlacement(
           operators[col],
-          posts[row]
-          );
-}
+          posts[row],
+          '',
+          {
+            onConfirm: () => {
+              // I при подтверждённой постановке становится Lкр.
+              if (shouldPromoteIToLcr) {
+                data[row][col] = 'Lкр';
+
+                if (
+                  operatorRoles[col] !== 'ДС' &&
+                  typeof createAutomaticLcrTrainingRecord === 'function'
+                ) {
+                  createAutomaticLcrTrainingRecord(row, col);
+                }
+              }
+
+              renderMatrix();
+            },
+            onCancel: restoreCirclePlacement
+          }
+        );
+        return;
+      }
 
       renderMatrix();
 
       if (newVal === '△') {
-         openAutomaticTrainingForm(row, col);
-}
+        openAutomaticTrainingForm(row, col);
+      }
     }
   );
 }
