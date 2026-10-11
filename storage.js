@@ -24,6 +24,7 @@ function saveState() {
     data,
     trainingRecords,
     placementLog,
+    statsHistory,
     placementFilters,
     placementSort,
     workshopChief,
@@ -126,6 +127,10 @@ function loadState() {
     data = state.data;
     trainingRecords = state.trainingRecords;
     placementLog = state.placementLog;
+
+    statsHistory = Array.isArray(state.statsHistory)
+      ? state.statsHistory
+      : [];
 
     if (
       state.placementFilters &&

@@ -232,40 +232,48 @@
     </div>
 
     <div class="export-buttons" aria-label="Действия с данными">
-      <span class="toolbar-label">Действия</span>
+  <span class="toolbar-label">Действия</span>
 
-      <button
-        class="btn-small"
-        type="button"
-        onclick="window.exportCurrentTableToExcel()"
-      >
-        📊 Скачать Excel
-      </button>
+  <button
+    class="btn-small"
+    type="button"
+    onclick="window.exportCurrentTableToExcel()"
+  >
+    📊 Скачать Excel
+  </button>
 
-      <button
-        class="btn-small"
-        type="button"
-        onclick="window.exportApplicationBackup()"
-      >
-        💾 Сохранить базу
-      </button>
+  <button
+    class="btn-small"
+    type="button"
+    onclick="window.chooseBackupDirectory()"
+  >
+    📁 Выбрать папку
+  </button>
 
-      <button
-        class="btn-small"
-        type="button"
-        onclick="document.getElementById('backupFileInput').click()"
-      >
-        📂 Загрузить базу
-      </button>
+  <button
+    class="btn-small"
+    type="button"
+    onclick="window.saveBackupToDirectory()"
+  >
+    💾 Сохранить
+  </button>
 
-      <input
-        id="backupFileInput"
-        type="file"
-        accept="application/json,.json"
-        hidden
-        onchange="window.importApplicationBackup(event)"
-      >
-    </div>
+  <button
+    class="btn-small"
+    type="button"
+    onclick="document.getElementById('backupFileInput').click()"
+  >
+    📂 Загрузить
+  </button>
+
+  <input
+    id="backupFileInput"
+    type="file"
+    accept="application/json,.json"
+    hidden
+    onchange="window.importApplicationBackup(event)"
+  />
+</div>
 
   </div>
 

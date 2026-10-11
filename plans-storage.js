@@ -1533,7 +1533,7 @@ document.addEventListener('visibilitychange', () => {
     activeCell = cell;
     const post = cell.parentElement.cells[0].textContent.trim();
     const date = `${String(day).padStart(2, '0')}.${String(view.getMonth() + 1).padStart(2, '0')}.${view.getFullYear()}`;
-    tooltip.textContent = `Пост: ${post}\nДата: ${date}`;
+    tooltip.textContent = `${post}\n${date}`;
     tooltip.hidden = false;
     position();
   };
@@ -1571,7 +1571,7 @@ document.addEventListener('visibilitychange', () => {
     activeCell = cell;
     const post = cell.parentElement.cells[0].textContent.trim();
     const date = `${String(day).padStart(2, '0')}.${String(view.getMonth() + 1).padStart(2, '0')}.${view.getFullYear()}`;
-    tooltip.textContent = `Пост: ${post}\nДата: ${date}`;
+    tooltip.textContent = `${post}\n${date}`;
     cell.removeAttribute('title');
     tooltip.hidden = true;
     tooltipTimer = setTimeout(() => {

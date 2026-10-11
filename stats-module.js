@@ -8,6 +8,14 @@ function getStatsDateKey(date = new Date()) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+function formatStatsDate(dateKey, withYear = false) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateKey || ''));
+  if (!match) return String(dateKey || '');
+  return withYear
+    ? `${match[3]}.${match[2]}.${match[1]}`
+    : `${match[3]}.${match[2]}`;
+}
+
 function getStatsPercent(value) {
   const number = Number(value);
   return Number.isFinite(number)
@@ -715,7 +723,7 @@ function renderPolyvalenceChart() {
           cy="${y(value).toFixed(1)}"
           r="3.5"
           fill="${color}"
-        ><title>${item.date}: ${value}%</title></circle>`
+        ><title>${formatStatsDate(item.date, true)}: ${value}%</title></circle>`
       )
       .join('');
 
@@ -740,9 +748,9 @@ function renderPolyvalenceChart() {
       })
       .join('');
 
-    const firstDate = chartPoints[0].item.date.slice(5);
+    const firstDate = formatStatsDate(chartPoints[0].item.date);
     const lastDate =
-      chartPoints[chartPoints.length - 1].item.date.slice(5);
+      formatStatsDate(chartPoints[chartPoints.length - 1].item.date);
 
     container.innerHTML = `
       <svg
@@ -885,7 +893,7 @@ function renderAttendanceHistoryTable() {
 
     return `
       <tr>
-        <td>${escapeStatsHtml(item.date)}</td>
+        <td>${escapeStatsHtml(formatStatsDate(item.date, true))}</td>
         <td>${present}</td>
         <td>${absent}</td>
         <td>${total}</td>
