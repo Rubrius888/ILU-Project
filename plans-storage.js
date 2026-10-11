@@ -158,7 +158,7 @@ function mergeCurrentMonthHistory(type, previous, rows, year, month) {
     const oldRow = oldRows.get(currentPosts[rowIndex]);
     if (!oldRow) return row;
     const merged = [...row];
-    const lastHistoricalColumn = Math.min(today.getDate(), merged.length - 1, oldRow.length - 1);
+    const lastHistoricalColumn = Math.min(today.getDate() - 1, merged.length - 1, oldRow.length - 1);
     for (let column = 1; column <= lastHistoricalColumn; column++) {
       merged[column] = oldRow[column];
     }
@@ -166,13 +166,117 @@ function mergeCurrentMonthHistory(type, previous, rows, year, month) {
   });
 }
 
+function normalizeRotationChainDates(chain, plan) {
+  if (!chain || !plan || !Number.isInteger(Number(plan.year)) ||
+      !Number.isInteger(Number(plan.month)) ||
+      !Number.isInteger(Number(chain.startDay)) ||
+      !Number.isInteger(Number(chain.endDay))) return null;
+  const year = Number(plan.year);
+  const month = Number(plan.month);
+  const startIndex = Number(chain.startDay);
+  const endIndex = Number(chain.endDay);
+  if (startIndex < 0 || endIndex < startIndex) return null;
+
+  const candidates = [
+    { start: startIndex + 1, end: endIndex + 1, base: 'zero-based' },
+    { start: startIndex, end: endIndex, base: 'one-based' }
+  ].filter(candidate => candidate.start >= 1 && candidate.end <= new Date(year, month + 1, 0).getDate());
+  if (!Array.isArray(plan.rows) || !Array.isArray(plan.posts) || !chain.participants?.length) {
+    return candidates.length === 1 ? { ...candidates[0], year, month } : null;
+  }
+
+  const matches = candidates.filter(candidate => chain.participants.every(participant => {
+    const rowIndex = plan.posts.indexOf(participant.toPost);
+    const row = rowIndex >= 0 ? plan.rows[rowIndex] : null;
+    if (!Array.isArray(row)) return false;
+    const actualDates = row.slice(1).reduce((dates, value, columnIndex) => {
+      if (String(value).trim() === String(participant.operator).trim()) dates.push(columnIndex + 1);
+      return dates;
+    }, []);
+    const expectedDays = [];
+    for (let day = candidate.start; day <= candidate.end; day++) {
+      const weekday = new Date(year, month, day).getDay();
+      if (weekday !== 0 && weekday !== 6) expectedDays.push(day);
+    }
+    const requiredDays = Number(chain.durationWorkingDays);
+    return expectedDays.length > 0 &&
+      (!Number.isInteger(requiredDays) || expectedDays.length === requiredDays) &&
+      expectedDays.every(day => actualDates.includes(day));
+  }));
+  return matches.length === 1 ? { ...matches[0], year, month } : null;
+}
+
+function getProtectedRotationChains(plan, year, month) {
+  if (!plan || !Array.isArray(plan.chains)) return [];
+  const today = new Date();
+  if (year !== today.getFullYear() || month !== today.getMonth()) return [];
+  return plan.chains.filter(chain => {
+    const dates = normalizeRotationChainDates(chain, plan);
+    return dates && dates.start <= today.getDate();
+  }).map(chain => ({
+    chain,
+    dates: normalizeRotationChainDates(chain, plan)
+  }));
+}
+
+function mergeProtectedRotationRows(previous, rows, plan, protectedChains) {
+  if (!previous || !Array.isArray(previous.rows) || !protectedChains.length) return rows;
+  const merged = rows.map(row => Array.isArray(row) ? [...row] : row);
+  for (const { chain, dates } of protectedChains) {
+    for (const participant of chain.participants || []) {
+      const rowIndex = plan.posts.indexOf(participant.toPost);
+      const oldRow = previous.rows[rowIndex];
+      const newRow = merged[rowIndex];
+      if (!Array.isArray(oldRow) || !Array.isArray(newRow)) {
+        throw new Error(`Невозможно восстановить защищённую цепочку №${chain.id ?? '—'}.`);
+      }
+      for (let day = dates.start; day <= dates.end; day++) {
+        const column = day;
+        if (column < 1 || column >= newRow.length || column >= oldRow.length) {
+          throw new Error(`Защищённая цепочка №${chain.id ?? '—'} выходит за границы календаря.`);
+        }
+        newRow[column] = oldRow[column];
+      }
+    }
+  }
+  return merged;
+}
+
 function validateNoActiveRotationChain(previous, year, month) {
   if (!previous || !Array.isArray(previous.chains)) return;
   const today = new Date();
   if (year !== today.getFullYear() || month !== today.getMonth()) return;
   const day = today.getDate();
-  if (previous.chains.some(chain => Number(chain.startDay) < day && Number(chain.endDay) >= day)) {
-    throw new Error('План ротации содержит активную цепочку, начавшуюся до сегодняшней даты. Исходный план сохранён без изменений.');
+  const normalizedChains = previous.chains.map(chain => ({
+    chain,
+    dates: normalizeRotationChainDates(chain, previous)
+  }));
+  const ambiguous = normalizedChains.find(item => !item.dates);
+  if (ambiguous) {
+    throw new Error(
+      `Невозможно однозначно определить даты цепочки №${ambiguous.chain.id ?? '—'}. ` +
+      'Перегенерация заблокирована, исходный план сохранён без изменений.'
+    );
+  }
+  const activeChain = normalizedChains.find(({ dates }) =>
+    dates.year === today.getFullYear() && dates.month === today.getMonth() &&
+    dates.start < day && dates.end >= day
+  );
+  if (activeChain) {
+    const participants = (activeChain.chain.participants || [])
+      .map(item => {
+        const from = item.fromPost || 'свободен';
+        const to = item.toPost || 'освобождён';
+        return `${item.operator}: ${from} → ${to}`;
+      })
+      .join('; ');
+    const start = `${String(activeChain.dates.start).padStart(2, '0')}.${String(month + 1).padStart(2, '0')}.${year}`;
+    const end = `${String(activeChain.dates.end).padStart(2, '0')}.${String(month + 1).padStart(2, '0')}.${year}`;
+    throw new Error(
+      `Перегенерация заблокирована: активная цепочка №${activeChain.chain.id ?? '—'} ` +
+      `идёт с ${start} по ${end}. ${participants || 'Участники не указаны'}. ` +
+      'Исходный план сохранён без изменений.'
+    );
   }
 }
 
@@ -230,7 +334,19 @@ function capturePlan(type, tableId, preserveHistory = false) {
     const key = planMonthKey(year, month);
     const previous = getRotationSnapshot(year, month);
     validateNoActiveRotationChain(previous, year, month);
-    if (preserveHistory) rows = mergeCurrentMonthHistory(type, previous, rows, year, month);
+    if (preserveHistory) {
+      rows = mergeCurrentMonthHistory(type, previous, rows, year, month);
+      const protectedChains = window.rotationProtectedContext?.year === year &&
+        window.rotationProtectedContext?.month === month
+        ? window.rotationProtectedContext.chains
+        : [];
+      rows = mergeProtectedRotationRows(
+        previous,
+        rows,
+        { posts: posts },
+        protectedChains
+      );
+    }
     const generationMeta = window.lastRotationGenerationMeta;
     const generatedForMonth = generationMeta?.year === year && generationMeta?.month === month;
     const meta = generatedForMonth ? generationMeta : (previous || {});
@@ -434,7 +550,15 @@ function restorePlan(type, tableId, color, explicitPlan = null) {
       const operator = String(value || '').trim();
       if (operator && operator !== '+') {
         cell.dataset.op = operator;
-        cell.style.color = color;
+        const isReserve = type === 'rotation' && operator.startsWith('ДС:');
+        if (isReserve) {
+          cell.dataset.reserve = 'true';
+          cell.style.color = '#7c3aed';
+          cell.style.fontWeight = '600';
+          cell.style.cursor = 'default';
+        } else {
+          cell.style.color = color;
+        }
         cell.style.fontWeight = '600';
         const chainId = rotationChainCells[`${rowIndex}:${columnIndex - 1}`];
         if (chainId) {
@@ -446,11 +570,15 @@ function restorePlan(type, tableId, color, explicitPlan = null) {
         cell.style.color = '#94a3b8';
         cell.style.fontSize = '16px';
       }
-      cell.style.cursor = 'pointer';
+      if (!(type === 'rotation' && cell.dataset.reserve === 'true')) {
+        cell.style.cursor = 'pointer';
+      }
       if (operator && operator !== '+') {
-        cell.onclick = event => type === 'rotation'
-          ? editRotationCell(event)
-          : editCalendarCell(event);
+        if (cell.dataset.reserve !== 'true') {
+          cell.onclick = event => type === 'rotation'
+            ? editRotationCell(event)
+            : editCalendarCell(event);
+        }
       } else {
         cell.onclick = event => type === 'rotation'
           ? addRotationOp(event)
@@ -460,6 +588,20 @@ function restorePlan(type, tableId, color, explicitPlan = null) {
   });
 
   if (type === 'development') renderDevelopmentStatus(plan);
+  if (type === 'rotation' && window.ILU_ROTATION_DIAGNOSTICS === true) {
+    const reserveCells = table.querySelectorAll('td[data-reserve="true"]').length;
+    window.lastRotationReserveDiagnostics ||= { counts: {} };
+    window.lastRotationReserveDiagnostics.counts ||= {};
+    window.lastRotationReserveDiagnostics.counts.renderedReserveCells = reserveCells;
+    window.lastRotationReserveDiagnostics.counts.passedReserveEntries =
+      Array.isArray(plan.chains)
+        ? plan.chains.reduce((total, chain) => total + (chain.reserves || []).length, 0)
+        : 0;
+    console.info('[ILU rotation restored reserve diagnostics]', {
+      passedReserveEntries: window.lastRotationReserveDiagnostics.counts.passedReserveEntries,
+      renderedReserveCells: reserveCells
+    });
+  }
   highlightPlanToday(tableId, plan.year, plan.month);
 }
 
@@ -981,6 +1123,8 @@ function isTrainingPlacementLevel(level) {
 function buildAutomaticRotationPlan(plan, activeChains) {
   const excludedRoles = new Set(['НУ', 'СО', 'ДС']);
   const participants = [];
+  const reserves = [];
+  const seenReserves = new Set();
   const seenOperators = new Set();
   const seenDestinations = new Set();
 
@@ -1031,11 +1175,31 @@ function buildAutomaticRotationPlan(plan, activeChains) {
       }
       participants.push({ opIndex, fromPost, toPost });
     }
+    for (const reserve of chain.reserves || []) {
+      const opIndex = operators.indexOf(reserve.operator);
+      const postIndex = posts.indexOf(reserve.post);
+      if (opIndex < 0 || postIndex < 0 || operatorRoles[opIndex] !== 'ДС' ||
+        !isRotationAttendance(opIndex) || !isRotationLevel(data[postIndex]?.[opIndex]) ||
+        getCurrentOperatorPosts(opIndex).length > 0) {
+        return { error: `Резервный ДС «${reserve.operator}» недоступен для покрытия.` };
+      }
+      const key = `${opIndex}:${postIndex}`;
+      if (seenReserves.has(key)) return { error: 'Резервный ДС используется повторно.' };
+      if (seenDestinations.has(postIndex)) return { error: 'Резервный ДС конфликтует с целевым постом цепочки.' };
+      seenDestinations.add(postIndex);
+      seenReserves.add(key);
+      reserves.push({ opIndex, postIndex });
+    }
   }
 
   const participantByOperator = new Map(
     participants.map(participant => [participant.opIndex, participant])
   );
+  const reservedPosts = new Set();
+  for (const reserve of reserves) {
+    if (reservedPosts.has(reserve.postIndex)) return { error: 'Резервные закрыватели конфликтуют по посту.' };
+    reservedPosts.add(reserve.postIndex);
+  }
   for (const participant of participants) {
     const currentPosts = getCurrentOperatorPosts(participant.opIndex);
     if (participant.fromPost === null) {
@@ -1046,6 +1210,7 @@ function buildAutomaticRotationPlan(plan, activeChains) {
       return { error: `Расстановка оператора «${operators[participant.opIndex]}» не совпадает с планом.` };
     }
   }
+  for (const reserve of reserves) finalCoverage[reserve.postIndex].add(reserve.opIndex);
 
   // Целевой пост может быть занят только участником этой же перестановки.
   // Формальное закрепление СО игнорируется: его кружок не изменяется.
@@ -1136,7 +1301,7 @@ function buildAutomaticRotationPlan(plan, activeChains) {
     }
   }
 
-  return { participants, changes: [...changes.values()] };
+  return { participants, reserves, changes: [...changes.values()] };
 }
 
 function restoreAutomaticRotationState() {
@@ -1357,9 +1522,13 @@ function runPlanGeneration(type, task) {
       task();
     } catch (error) {
       console.error(`Ошибка формирования плана ${type}:`, error);
+      // Убираем overlay до показа ошибки: пользователь должен видеть
+      // конкретное сообщение, а не оставшийся индикатор расчёта.
+      activePlanGeneration = null;
+      hidePlanGenerationIndicator();
       alert(
         type === 'rotation'
-          ? 'Не удалось сформировать план ротации.'
+          ? (error?.message || 'Не удалось сформировать план ротации.')
           : 'Не удалось сформировать план обучения.'
       );
     } finally {
@@ -1393,9 +1562,36 @@ function wrapPlanGenerator(type, functionName, tableId, color) {
       try {
         const viewDate = type === 'rotation' ? getRotationViewDate() : getDevelopmentViewDate();
         if (type === 'rotation') {
-          validateNoActiveRotationChain(getRotationSnapshot(viewDate.getFullYear(), viewDate.getMonth()), viewDate.getFullYear(), viewDate.getMonth());
+          const previous = getRotationSnapshot(viewDate.getFullYear(), viewDate.getMonth());
+          const protectedChains = getProtectedRotationChains(
+            previous,
+            viewDate.getFullYear(),
+            viewDate.getMonth()
+          );
+          window.rotationProtectedContext = {
+            year: viewDate.getFullYear(),
+            month: viewDate.getMonth(),
+            previous,
+            chains: protectedChains
+          };
+          if (previous && viewDate.getFullYear() < new Date().getFullYear() ||
+              previous && viewDate.getFullYear() === new Date().getFullYear() &&
+              viewDate.getMonth() < new Date().getMonth()) {
+            throw new Error('Перегенерация прошлого месяца запрещена. Исторический план сохранён без изменений.');
+          }
         }
         originalFunction.apply(this, arguments);
+        if (type === 'rotation' && window.rotationProtectedContext) {
+          const generated = window.lastRotationGenerationMeta?.chains || [];
+          const idOffset = window.rotationProtectedContext.chains.length;
+          window.lastRotationGenerationMeta.chains = [
+            ...window.rotationProtectedContext.chains.map(item => item.chain),
+            ...generated.map(chain => ({
+              ...chain,
+              id: Number.isFinite(Number(chain.id)) ? Number(chain.id) + idOffset : chain.id
+            }))
+          ];
+        }
         capturePlan(type, tableId, true);
         restorePlan(type, tableId, color);
         if (type === 'rotation') applyAutomaticRotation();
@@ -1408,6 +1604,8 @@ function wrapPlanGenerator(type, functionName, tableId, color) {
         }
         restorePlan(type, tableId, color);
         throw error;
+      } finally {
+        if (type === 'rotation') window.rotationProtectedContext = null;
       }
     });
   };

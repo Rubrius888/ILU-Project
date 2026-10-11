@@ -1,4 +1,5 @@
 // ======================== ПЛАНИРОВАНИЕ РАЗВИТИЯ ========================
+window.ILU_DEVELOPMENT_GENERATOR_VERSION = '1.2-sequential-training-2026-10-11';
 function generateDevelopmentPlan() {
   const thead = document.querySelector('#devCalendarTable thead');
   const tbody = document.querySelector('#devCalendarTable tbody');
@@ -33,9 +34,34 @@ function generateDevelopmentPlan() {
   };
   const getLevel = (postIndex, opIndex) => data[postIndex]?.[opIndex] ?? null;
   const getStatus = (postIndex, opIndex) => attendanceData?.[postIndex]?.[opIndex] || '';
+  const diagnostic = window.ILU_DEVELOPMENT_DIAGNOSTICS === true
+    ? { posts: {}, assignments: [], events: [], _seen: new Set() }
+    : null;
+  const recordDiagnostic = (postIndex, opIndex, reasons) => {
+    if (!diagnostic) return;
+    const key = String(postIndex);
+    diagnostic.posts[key] ||= { post: posts[postIndex], candidates: [] };
+    const signature = `${postIndex}:${opIndex}:${reasons.slice().sort().join('|')}`;
+    if (diagnostic._seen.has(signature)) return;
+    diagnostic._seen.add(signature);
+    diagnostic.posts[key].candidates.push({
+      operator: operators[opIndex],
+      level: getLevel(postIndex, opIndex),
+      role: operatorRoles[opIndex],
+      reasons
+    });
+  };
+  const diagnosticEvent = event => {
+    if (diagnostic) diagnostic.events.push(event);
+  };
 
   const eligibleOps = [];
+  const replacementOps = [];
   for (let c = 0; c < operators.length; c++) {
+    if (operatorRoles[c] === 'ДС') {
+      replacementOps.push({ index: c, name: operators[c], count: 0 });
+      continue;
+    }
     if (!isEligibleOperator(c)) continue;
     let poly = 0;
     for (let r = 0; r < posts.length; r++) {
@@ -78,7 +104,13 @@ function generateDevelopmentPlan() {
     return occupied;
   });
   const cloneOccupancy = occupancy => occupancy.map(set => new Set(set));
-  const usedOps = new Set();
+  const configuredTrainingLimit = window.developmentSettings?.maxOperatorTrainings;
+  const maxOperatorTrainings = configuredTrainingLimit === 'unlimited' ||
+    configuredTrainingLimit === Infinity
+    ? Infinity
+    : Math.max(1, Number.parseInt(configuredTrainingLimit, 10) || 2);
+  const assignmentCounts = new Map(eligibleOps.map(op => [op.index, 0]));
+  const assignedPostKeys = new Set();
   const lockedPosts = new Set();
   const planAssignments = [];
 
@@ -104,8 +136,10 @@ function generateDevelopmentPlan() {
       return occupancy;
     }
 
-    const replacements = eligibleOps
-      .filter(op => op.index !== blockedOp && !usedOps.has(op.index))
+    const replacements = [...eligibleOps, ...replacementOps]
+      .filter(op => op.index !== blockedOp)
+      .filter(op => operatorRoles[op.index] !== 'ДС' ||
+        (isRotationAttendance(op.index) && isFree(op.index, occupancy)))
       .map(op => ({
         ...op,
         level: getLevel(postIndex, op.index),
@@ -170,11 +204,15 @@ function generateDevelopmentPlan() {
   }
 
   function addAssignment(postIndex, opIndex, stage, releaseState, allowLocked = false) {
-    if (usedOps.has(opIndex) || (lockedPosts.has(postIndex) && !allowLocked)) return false;
+    const assignmentKey = `${opIndex}:${postIndex}`;
+    if ((assignmentCounts.get(opIndex) || 0) >= maxOperatorTrainings ||
+      assignedPostKeys.has(assignmentKey) ||
+      (lockedPosts.has(postIndex) && !allowLocked)) return false;
     const nextOccupancy = releaseState || releaseForTraining(opIndex, postIndex);
     if (!nextOccupancy) return false;
     virtualOccupancy = nextOccupancy;
-    usedOps.add(opIndex);
+    assignmentCounts.set(opIndex, (assignmentCounts.get(opIndex) || 0) + 1);
+    assignedPostKeys.add(assignmentKey);
     virtualCoverage[postIndex]++;
     virtualPoly.set(opIndex, (virtualPoly.get(opIndex) || 0) + 1);
     planAssignments.push({
@@ -188,7 +226,7 @@ function generateDevelopmentPlan() {
 
   function candidatesForPost(postIndex) {
     return eligibleOps
-      .filter(op => !usedOps.has(op.index))
+      .filter(op => (assignmentCounts.get(op.index) || 0) < maxOperatorTrainings)
       .map(op => ({
         ...op,
         level: getLevel(postIndex, op.index),
@@ -196,10 +234,16 @@ function generateDevelopmentPlan() {
         releaseState: releaseForTraining(op.index, postIndex)
       }))
       .filter(candidate =>
-        !lockedPosts.has(postIndex) &&
-        isCandidateLevel(candidate.level) &&
-        isFirstLEligible(candidate.index, postIndex) &&
-        candidate.releaseState
+        (() => {
+          const reasons = [];
+          if (lockedPosts.has(postIndex)) reasons.push('post_locked');
+          if (!isCandidateLevel(candidate.level)) reasons.push('level_not_candidate');
+          if (assignedPostKeys.has(`${candidate.index}:${postIndex}`)) reasons.push('same_post_already_assigned');
+          if (!isFirstLEligible(candidate.index, postIndex)) reasons.push('first_L_restriction');
+          if (!candidate.releaseState) reasons.push('unsafe_release');
+          recordDiagnostic(postIndex, candidate.index, reasons);
+          return reasons.length === 0;
+        })()
       )
       .sort((a, b) => {
         const qualification = qualificationPriority(b.level) - qualificationPriority(a.level);
@@ -220,7 +264,7 @@ function generateDevelopmentPlan() {
     );
     if (!continuation) continue;
     lockedPosts.add(post.index);
-    if (!usedOps.has(continuation.index)) {
+    if (!assignedPostKeys.has(`${continuation.index}:${post.index}`)) {
       addAssignment(
         post.index,
         continuation.index,
@@ -236,7 +280,8 @@ function generateDevelopmentPlan() {
   const baseVirtualCoverage = [...virtualCoverage];
   const baseVirtualPoly = new Map(virtualPoly);
   const baseVirtualOccupancy = cloneOccupancy(virtualOccupancy);
-  const baseUsedOps = new Set(usedOps);
+  const baseAssignmentCounts = new Map(assignmentCounts);
+  const baseAssignedPostKeys = new Set(assignedPostKeys);
   const basePlanAssignmentCount = planAssignments.length;
 
   function developPostsTo(targetLevel) {
@@ -250,8 +295,14 @@ function generateDevelopmentPlan() {
     for (const post of postsToDevelop) {
       while (virtualCoverage[post.index] < targetLevel && !lockedPosts.has(post.index)) {
         const candidate = candidatesForPost(post.index)[0];
-        if (!candidate) break;
-        if (!addAssignment(post.index, candidate.index, `Посты ${targetLevel}L`, candidate.releaseState)) break;
+        if (!candidate) {
+          diagnosticEvent({ type: 'posts_cycle_stop', post: posts[post.index], targetLevel, reason: 'no_feasible_candidate' });
+          break;
+        }
+        if (!addAssignment(post.index, candidate.index, `Посты ${targetLevel}L`, candidate.releaseState)) {
+          diagnosticEvent({ type: 'posts_cycle_stop', post: posts[post.index], targetLevel, operator: operators[candidate.index], reason: 'add_assignment_rejected' });
+          break;
+        }
       }
     }
   }
@@ -267,6 +318,7 @@ function generateDevelopmentPlan() {
         rarity: postDemand[post.index] || 0
       }))
       .filter(option => isCandidateLevel(option.level) && option.releaseState)
+      .filter(option => !assignedPostKeys.has(`${op.index}:${option.post.index}`))
       .filter(option => isFirstLEligible(op.index, option.post.index))
       .map(option => ({ ...option }));
   }
@@ -278,18 +330,21 @@ function generateDevelopmentPlan() {
     while (true) {
       const available = eligibleOps
         .filter(op =>
-          !usedOps.has(op.index) &&
+          (assignmentCounts.get(op.index) || 0) < maxOperatorTrainings &&
           (virtualPoly.get(op.index) || 0) < targetLevel &&
           canStillDevelop(op)
         );
-      if (!available.length) break;
+      if (!available.length) {
+        diagnosticEvent({ type: 'operators_cycle_stop', targetLevel, reason: 'no_available_operator' });
+        break;
+      }
 
       const currentPoly = Math.min(
-        ...available.map(op => virtualPoly.get(op.index) || 0)
+        ...available.map(op => assignmentCounts.get(op.index) || 0)
       );
       const group = new Set(
         available
-          .filter(op => (virtualPoly.get(op.index) || 0) === currentPoly)
+          .filter(op => (assignmentCounts.get(op.index) || 0) === currentPoly)
           .map(op => op.index)
       );
 
@@ -313,7 +368,15 @@ function generateDevelopmentPlan() {
           });
 
         // Все оставшиеся операторы группы без feasible-поста исчерпаны.
-        if (!possible.length) break;
+        if (!possible.length) {
+          diagnosticEvent({
+            type: 'operators_group_stop',
+            targetLevel,
+            operators: [...group].map(index => operators[index]),
+            reason: 'no_operator_has_feasible_post'
+          });
+          break;
+        }
 
         const selected = possible[0];
         const options = selected.options.sort((a, b) => {
@@ -326,6 +389,7 @@ function generateDevelopmentPlan() {
           return coverageDiff || a.post.index - b.post.index;
         });
         const option = options[0];
+        diagnosticEvent({ type: 'operator_selected', targetLevel, operator: selected.op.name, post: option.post.name });
         group.delete(selected.op.index);
         addAssignment(
           option.post.index,
@@ -338,10 +402,11 @@ function generateDevelopmentPlan() {
   }
 
   function canStillDevelop(op) {
-    if (usedOps.has(op.index)) return false;
+    if ((assignmentCounts.get(op.index) || 0) >= maxOperatorTrainings) return false;
     return postCoverage.some(post =>
       !lockedPosts.has(post.index) &&
       isCandidateLevel(getLevel(post.index, op.index)) &&
+      !assignedPostKeys.has(`${op.index}:${post.index}`) &&
       isFirstLEligible(op.index, post.index) &&
       releaseForTraining(op.index, post.index)
     );
@@ -430,6 +495,7 @@ function generateDevelopmentPlan() {
   // неполностью размещаемое назначение останавливает месячный план.
   const schedule = {};
   const dailyCount = {};
+  const operatorStageEnd = new Map();
   const acceptedAssignments = [];
   const generatedLogicalCount = planAssignments.length;
   let generationStoppedByCalendar = false;
@@ -442,16 +508,22 @@ function generateDevelopmentPlan() {
   for (const assign of planWithDays) {
     const opName = operators[assign.opIndex];
     const selectedDays = [];
-    for (let d = generationStartDay; d < daysInMonth && selectedDays.length < assign.days; d++) {
+    const earliestDay = Math.max(generationStartDay, (operatorStageEnd.get(assign.opIndex) ?? -1) + 1);
+    for (let d = earliestDay; d < daysInMonth && selectedDays.length < assign.days; d++) {
       const dayOfWeek = new Date(year, month, d + 1).getDay();
       if (dayOfWeek === 0 || dayOfWeek === 6) continue;
-      if ((dailyCount[d] || 0) >= maxConcurrentTrainings) continue;
+      if ((dailyCount[d] || 0) >= maxConcurrentTrainings) {
+        selectedDays.length = 0;
+        continue;
+      }
       let busy = false;
       for (const key in schedule) {
         if (schedule[key]?.[d] === opName) { busy = true; break; }
       }
-      if (busy) continue;
-      if (schedule[assign.postIndex] && schedule[assign.postIndex][d]) continue;
+      if (busy || (schedule[assign.postIndex] && schedule[assign.postIndex][d])) {
+        selectedDays.length = 0;
+        continue;
+      }
       selectedDays.push(d);
     }
 
@@ -473,7 +545,9 @@ function generateDevelopmentPlan() {
       schedule[assign.postIndex][d] = opName;
       dailyCount[d] = (dailyCount[d] || 0) + 1;
     }
-    acceptedAssignments.push(assign);
+    operatorStageEnd.set(assign.opIndex, selectedDays[selectedDays.length - 1]);
+    acceptedAssignments.push({ ...assign, startDay: selectedDays[0] + 1,
+      endDay: selectedDays[selectedDays.length - 1] + 1, selectedDays: [...selectedDays] });
   }
 
   window.lastDevelopmentGenerationMeta = {
@@ -487,6 +561,33 @@ function generateDevelopmentPlan() {
     acceptedCount: acceptedAssignments.length,
     logicalCount: generatedLogicalCount
   };
+  if (diagnostic) {
+    posts.forEach((post, index) => {
+      const key = String(index);
+      diagnostic.posts[key] ||= { post, candidates: [] };
+      if (lockedPosts.has(index) && diagnostic.posts[key].candidates.length === 0) {
+        diagnostic.posts[key].candidates.push({
+          operator: null,
+          level: null,
+          role: null,
+          reasons: ['post_locked_by_continuation']
+        });
+      }
+    });
+    Object.values(diagnostic.posts).forEach(report => {
+      report.assigned = acceptedAssignments
+        .filter(item => posts[item.postIndex] === report.post)
+        .map(item => {
+          const days = Object.keys(schedule[item.postIndex] || {})
+            .filter(day => schedule[item.postIndex][day] === operators[item.opIndex])
+            .map(day => Number(day) + 1);
+          return { operator: operators[item.opIndex], days };
+        });
+    });
+    delete diagnostic._seen;
+    window.lastDevelopmentDiagnostics = diagnostic;
+    console.info('[ILU development diagnostics]', diagnostic);
+  }
 
   // После календарного STOP итоговый logical list содержит только уже
   // принятые назначения. Невыполнимое и все последующие назначения не
@@ -499,8 +600,10 @@ function generateDevelopmentPlan() {
     virtualPoly.clear();
     baseVirtualPoly.forEach((value, key) => virtualPoly.set(key, value));
     virtualOccupancy = cloneOccupancy(baseVirtualOccupancy);
-    usedOps.clear();
-    baseUsedOps.forEach(index => usedOps.add(index));
+    assignmentCounts.clear();
+    baseAssignmentCounts.forEach((count, index) => assignmentCounts.set(index, count));
+    assignedPostKeys.clear();
+    baseAssignedPostKeys.forEach(key => assignedPostKeys.add(key));
 
     // Восстанавливаем virtual state только для реально принятых
     // назначений, созданных после обязательных continuation-записей.
@@ -514,7 +617,11 @@ function generateDevelopmentPlan() {
       );
       if (!nextOccupancy) continue;
       virtualOccupancy = nextOccupancy;
-      usedOps.add(assignment.opIndex);
+      assignmentCounts.set(
+        assignment.opIndex,
+        (assignmentCounts.get(assignment.opIndex) || 0) + 1
+      );
+      assignedPostKeys.add(`${assignment.opIndex}:${assignment.postIndex}`);
       virtualCoverage[assignment.postIndex]++;
       virtualPoly.set(
         assignment.opIndex,
@@ -560,6 +667,21 @@ function generateDevelopmentPlan() {
     bodyHTML += `<td style="font-weight:600;">${postDays}</td></tr>`;
   }
   tbody.innerHTML = bodyHTML;
+
+  if (window.ILU_DEVELOPMENT_DIAGNOSTICS === true) {
+    const displayedAssignments = Object.values(schedule).reduce(
+      (total, days) => total + Object.keys(days || {}).length,
+      0
+    );
+    window.lastDevelopmentGenerationSummary = {
+      version: window.ILU_DEVELOPMENT_GENERATOR_VERSION,
+      logicalAssignments: planAssignments.length,
+      calendarAssignments: acceptedAssignments.length,
+      displayedAssignments,
+      generatedFor: `${year}-${String(month + 1).padStart(2, '0')}`
+    };
+    console.info('[ILU development generation summary]', window.lastDevelopmentGenerationSummary);
+  }
 
   if (statusElement) {
     statusElement.textContent = generationStoppedByCalendar
@@ -940,6 +1062,11 @@ function isRotationLevel(level) {
 }
 
 function isRotationAttendance(index) {
+  // Для ДС значение «С» означает «в другом секторе» и является
+  // штатным специальным статусом доступного внешнего резервного оператора.
+  if (operatorRoles[index] === 'ДС') {
+    return operatorAttendance[index] === 'С';
+  }
   return operatorAttendance[index] === 'Я' || operatorAttendance[index] === 'Явка';
 }
 
@@ -967,6 +1094,7 @@ function getWorstAge(opIndex) {
   return worst;
 }
 
+window.ILU_ROTATION_GENERATOR_VERSION = '1.2-ds-reserve-render-2026-10-11';
 function generateRotationPlan() {
   const thead = document.querySelector('#rotCalendarTable thead');
   const tbody = document.querySelector('#rotCalendarTable tbody');
@@ -1012,9 +1140,17 @@ function generateRotationPlan() {
   const currentDate = new Date();
   const isCurrentMonth = year === currentDate.getFullYear() && month === currentDate.getMonth();
   const generationStartDay = isCurrentMonth ? currentDate.getDate() - 1 : 0;
+  const protectedRotationDays = new Set();
+  if (isCurrentMonth && window.rotationProtectedContext?.year === year &&
+      window.rotationProtectedContext?.month === month) {
+    for (const item of window.rotationProtectedContext.chains || []) {
+      const dates = item.dates;
+      for (let day = dates.start; day <= dates.end; day++) protectedRotationDays.add(day - 1);
+    }
+  }
   for (let day = generationStartDay; day < daysInMonth; day++) {
     const weekday = new Date(year, month, day + 1).getDay();
-    if (weekday !== 0 && weekday !== 6) workingDays.push(day);
+    if (weekday !== 0 && weekday !== 6 && !protectedRotationDays.has(day)) workingDays.push(day);
   }
 
   // Базовая расстановка — только текущие кружки. План не меняет матрицу.
@@ -1116,6 +1252,41 @@ function generateRotationPlan() {
   const activePosts = Array.from({ length: daysInMonth }, () => new Set());
   const schedule = Array.from({ length: daysInMonth }, () => ({}));
   const chains = [];
+  if (protectedRotationDays.size && window.rotationProtectedContext) {
+    for (const item of window.rotationProtectedContext.chains || []) {
+      const chain = item.chain;
+      const dates = item.dates;
+      const participants = chain.participants || [];
+      for (let day = dates.start - 1; day <= dates.end - 1; day++) {
+        activeChainCount[day]++;
+        for (const participant of participants) {
+          const opIndex = operators.indexOf(participant.operator);
+          const postIndex = posts.indexOf(participant.toPost);
+          if (opIndex >= 0) activeOperators[day].add(opIndex);
+          if (postIndex >= 0) activePosts[day].add(postIndex);
+        }
+        for (const reserve of chain.reserves || []) {
+          const opIndex = operators.indexOf(reserve.operator);
+          const postIndex = posts.indexOf(reserve.post);
+          if (opIndex >= 0) activeOperators[day].add(opIndex);
+          if (postIndex >= 0) activePosts[day].add(postIndex);
+        }
+      }
+    }
+  }
+  const rotationDiagnostics = window.ILU_ROTATION_DIAGNOSTICS === true
+    ? {
+      chains: [],
+      counts: {
+        calculatedChains: 0,
+        chainsWithReserves: 0,
+        reserveEntries: 0,
+        passedReserveEntries: 0,
+        renderedReserveCells: 0
+      },
+      endpointChecks: []
+    }
+    : null;
   const plannedNeedKeys = new Set();
   let unknownScheduled = 0;
 
@@ -1125,7 +1296,7 @@ function generateRotationPlan() {
   }
 
   function chainParticipants(chain) {
-    return new Set(chain.map(item => item.opIndex));
+    return new Set(chain.filter(item => !item.reserve).map(item => item.opIndex));
   }
 
   function chainPosts(chain) {
@@ -1144,7 +1315,12 @@ function generateRotationPlan() {
         next[item.fromPost] = null;
       }
     }
+    for (const reserve of chain.reserveOps || []) {
+      if (next[reserve.postIndex] !== null && next[reserve.postIndex] !== reserve.opIndex) return null;
+      next[reserve.postIndex] = reserve.opIndex;
+    }
     for (const item of chain) {
+      if (item.reserve) continue;
       if (item.toPost === null || item.toPost === undefined) continue;
       const occupant = next[item.toPost];
       if (occupant !== null && !participantOps.has(occupant)) return null;
@@ -1175,14 +1351,34 @@ function generateRotationPlan() {
       }
 
       for (let freeOp = 0; freeOp < operators.length; freeOp++) {
-        if (chainOps.has(freeOp) || !isEligibleOperator(freeOp)) continue;
+        if (chainOps.has(freeOp)) continue;
         if (currentOperatorPost(state, freeOp) !== null) continue;
-        if (!canUsePost(freeOp, sourcePost) || chainPostsSet.has(sourcePost)) continue;
+        const isReserve = operatorRoles[freeOp] === 'ДС';
+        if (isReserve) {
+          const reason = !isRotationAttendance(freeOp)
+            ? 'неявка'
+            : !isRotationLevel(data[sourcePost]?.[freeOp])
+              ? 'нет L/U на освобождаемом посту'
+              : null;
+          if (rotationDiagnostics) rotationDiagnostics.endpointChecks.push({
+            operator: operators[freeOp], post: posts[sourcePost], accepted: !reason, reason
+          });
+          if (reason) continue;
+        } else if (!canUsePost(freeOp, sourcePost)) continue;
+        if (chainPostsSet.has(sourcePost)) continue;
         const endpoint = [
           ...chain,
-          { opIndex: freeOp, fromPost: null, toPost: sourcePost }
+          { opIndex: freeOp, fromPost: null, toPost: sourcePost, reserve: isReserve }
         ];
-        if (applyChain(state, endpoint)) results.push(endpoint);
+        if (isReserve) endpoint.reserveOps = [{ opIndex: freeOp, postIndex: sourcePost }];
+        const applied = applyChain(state, endpoint);
+        if (rotationDiagnostics && isReserve && !applied) {
+          rotationDiagnostics.endpointChecks.push({
+            operator: operators[freeOp], post: posts[sourcePost], accepted: false,
+            reason: 'цепочка не прошла проверку покрытия/занятости'
+          });
+        }
+        if (applied) results.push(endpoint);
         if (results.length >= maxResults) return;
       }
     };
@@ -1345,11 +1541,20 @@ function generateRotationPlan() {
       virtualStates[day] = state;
       activeChainCount[day]++;
       for (const item of option.chain) {
+        if (item.reserve) continue;
         activeOperators[day].add(item.opIndex);
         if (item.toPost === null || item.toPost === undefined) continue;
         activePosts[day].add(item.toPost);
         schedule[day][item.toPost] = {
           operator: operators[item.opIndex],
+          chainId
+        };
+      }
+      for (const reserve of option.chain.reserveOps || []) {
+        activePosts[day].add(reserve.postIndex);
+        schedule[day][reserve.postIndex] = {
+          operator: `ДС: ${operators[reserve.opIndex]}`,
+          reserve: true,
           chainId
         };
       }
@@ -1372,6 +1577,10 @@ function generateRotationPlan() {
         toPost: item.toPost === null || item.toPost === undefined
           ? null
           : posts[item.toPost]
+      })).filter((_, index) => !option.chain[index].reserve),
+      reserves: (option.chain.reserveOps || []).map(reserve => ({
+        operator: operators[reserve.opIndex],
+        post: posts[reserve.postIndex]
       })),
       primaryNeed: {
         operator: need.operator,
@@ -1381,6 +1590,23 @@ function generateRotationPlan() {
       },
       usefulNeeds: usefulNeeds.map(item => item.key)
     });
+    if (rotationDiagnostics) {
+      const reserves = option.chain.reserveOps || [];
+      rotationDiagnostics.chains.push({
+        id: chainId,
+        startDay: option.blockDays[0] + 1,
+        endDay: option.blockDays[option.blockDays.length - 1] + 1,
+        operator: need.operator,
+        fromPost: option.chain[0]?.fromPost === null || option.chain[0]?.fromPost === undefined
+          ? null : posts[option.chain[0].fromPost],
+        toPost: posts[need.postIndex],
+        reserves: reserves.map(reserve => ({
+          operator: operators[reserve.opIndex],
+          post: posts[reserve.postIndex]
+        })),
+        noReserveReason: reserves.length ? null : 'резерв ДС не потребовался или не прошёл проверки'
+      });
+    }
   }
 
   // Неудачная потребность не останавливает месяц. После размещения других
@@ -1414,6 +1640,13 @@ function generateRotationPlan() {
     durationWorkingDays,
     maxConcurrentChains,
     chains,
+    reserveCoverages: chains.flatMap(chain => (chain.reserves || []).map(reserve => ({
+      chainId: chain.id,
+      startDay: chain.startDay,
+      endDay: chain.endDay,
+      operator: reserve.operator,
+      post: reserve.post
+    }))),
     needs: needs.map(need => ({
       key: need.key,
       operator: need.operator,
@@ -1429,12 +1662,33 @@ function generateRotationPlan() {
   for (let r = 0; r < posts.length; r++) {
     bodyHTML += `<tr><td style="text-align:left;font-weight:500;">${posts[r]}</td>`;
     for (let d = 0; d < daysInMonth; d++) {
-      const op = schedule[d][r]?.operator || '';
-      bodyHTML += `<td style="font-size:11px;">${op}</td>`;
+      const cell = schedule[d][r];
+      const op = cell?.operator || '';
+      const reserveAttrs = cell?.reserve ? ' data-reserve="true"' : '';
+      const reserveStyle = cell?.reserve ? 'color:#7c3aed;font-weight:600;' : '';
+      bodyHTML += `<td${reserveAttrs} style="font-size:11px;${reserveStyle}">${op}</td>`;
     }
     bodyHTML += '</tr>';
   }
   tbody.innerHTML = bodyHTML;
+
+  if (rotationDiagnostics) {
+    rotationDiagnostics.counts.calculatedChains = chains.length;
+    rotationDiagnostics.counts.chainsWithReserves = chains.filter(chain =>
+      Array.isArray(chain.reserves) && chain.reserves.length > 0
+    ).length;
+    rotationDiagnostics.counts.reserveEntries = chains.reduce(
+      (total, chain) => total + (Array.isArray(chain.reserves) ? chain.reserves.length : 0), 0
+    );
+    rotationDiagnostics.counts.passedReserveEntries = Object.values(schedule)
+      .reduce((total, daySchedule) => total + Object.values(daySchedule)
+        .filter(cell => cell?.reserve).length, 0);
+    rotationDiagnostics.counts.renderedReserveCells = tbody.querySelectorAll(
+      'td[data-reserve="true"]'
+    ).length;
+    window.lastRotationReserveDiagnostics = rotationDiagnostics;
+    console.info('[ILU rotation diagnostics]', rotationDiagnostics);
+  }
 
   // Закрашиваем выходные
   const allCells = tbody.querySelectorAll('td');
@@ -1476,6 +1730,12 @@ function generateRotationPlan() {
 
       if (text && text !== '+') {
         td.setAttribute('data-op', text);
+        if (td.getAttribute('data-reserve') === 'true') {
+          td.style.color = '#7c3aed';
+          td.style.fontWeight = '600';
+          td.style.cursor = 'default';
+          return;
+        }
         const chain = schedule[colIndex - 1][r]?.chainId;
         if (chain) {
           td.setAttribute('data-chain-id', String(chain));
