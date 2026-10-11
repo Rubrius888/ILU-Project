@@ -691,7 +691,7 @@ function editCalendarCell(event) {
 
   const menu = document.createElement('div');
   menu.className = 'context-menu';
-  menu.innerHTML = `<div class="danger" onclick="deleteCalendarTraining('${opName}', 'past'); hideMenu();">🗑️ Удалить прошедшие обучения</div><div class="danger" onclick="deleteCalendarTraining('${opName}', 'all'); hideMenu();">🗑️ Удалить все обучения за весь месяц</div>`;
+  menu.innerHTML = `<div class="danger" onclick="deleteCalendarTraining('${opName}', 'past'); hideMenu();">🗑️ Удалить прошедшие обучения</div><div class="danger" onclick="deleteCalendarTraining('${opName}', 'future'); hideMenu();">🗑️ Удалить будущие обучения</div>`;
   document.body.appendChild(menu);
   positionPlanContextMenu(menu, event);
   currentMenu = menu;
@@ -701,7 +701,9 @@ function editCalendarCell(event) {
 function deleteCalendarTraining(opName, mode = 'all') {
   const question = mode === 'past'
     ? `Удалить прошедшие обучения оператора «${opName}»?`
-    : `Удалить все обучения оператора «${opName}» за весь месяц?`;
+    : mode === 'future'
+      ? 'Удалить все обучения с сегодняшнего дня до конца выбранного месяца? Прошедшие обучения останутся без изменений'
+      : `Удалить все обучения оператора «${opName}» за весь месяц?`;
   if (!confirm(question)) return;
   const tbody = document.querySelector('#devCalendarTable tbody');
   if (!tbody) return;
@@ -714,10 +716,21 @@ function deleteCalendarTraining(opName, mode = 'all') {
   const affectedRows = new Set();
   const targets = Array.from(allTd).filter(td => {
     if (mode === 'all') return true;
-    if (isFutureMonth) return false;
+    if (mode === 'future' && isFutureMonth) return true;
+    if (mode === 'past' && isFutureMonth) return false;
     if (!isCurrentMonth) return true;
+    if (mode === 'future') return Number(td.dataset.day) >= cutoff;
     return Number(td.dataset.day) < cutoff;
   });
+
+  if (mode === 'future' && !isCurrentMonth && !isFutureMonth) {
+    alert('Выбран прошлый месяц. Будущие обучения отсутствуют.');
+    return;
+  }
+  if (!targets.length) {
+    alert('Будущих обучений для удаления нет.');
+    return;
+  }
 
   targets.forEach(td => {
     if (td.parentElement) {
