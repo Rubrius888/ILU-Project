@@ -856,19 +856,42 @@ function setupMatrixHoverHighlight() {
     if (tooltip.hidden) return;
     const gap = 12;
     const rect = tooltip.getBoundingClientRect();
-    const left = Math.min(
-      Math.max(8, pointerX + gap),
-      Math.max(8, window.innerWidth - rect.width - 8)
-    );
-    const top = Math.min(
-      Math.max(8, pointerY + gap),
-      Math.max(8, window.innerHeight - rect.height - 8)
-    );
+    const clamp = (value, min, max) => Math.min(Math.max(min, value), Math.max(min, max));
+    const bounds = {
+      left: 8,
+      top: 8,
+      right: window.innerWidth - 8,
+      bottom: window.innerHeight - 8
+    };
+    const select = document.querySelector('.inline-select');
+    const candidates = select
+      ? [
+          { left: select.getBoundingClientRect().right + gap, top: select.getBoundingClientRect().top },
+          { left: select.getBoundingClientRect().left - rect.width - gap, top: select.getBoundingClientRect().top },
+          { left: select.getBoundingClientRect().left, top: select.getBoundingClientRect().bottom + gap },
+          { left: select.getBoundingClientRect().left, top: select.getBoundingClientRect().top - rect.height - gap }
+        ]
+      : [{ left: pointerX + gap, top: pointerY + gap }];
+    const fits = candidate =>
+      candidate.left >= bounds.left &&
+      candidate.top >= bounds.top &&
+      candidate.left + rect.width <= bounds.right &&
+      candidate.top + rect.height <= bounds.bottom;
+    const intersects = (left, top, other) =>
+      other && left < other.right && left + rect.width > other.left &&
+      top < other.bottom && top + rect.height > other.top;
+    const selectRect = select?.getBoundingClientRect();
+    const chosen = candidates.find(candidate =>
+      fits(candidate) && !intersects(candidate.left, candidate.top, selectRect)
+    ) || candidates[0];
+    const left = clamp(chosen.left, bounds.left, bounds.right - rect.width);
+    const top = clamp(chosen.top, bounds.top, bounds.bottom - rect.height);
     tooltip.style.left = `${left}px`;
     tooltip.style.top = `${top}px`;
   };
+  table.__repositionMatrixTooltip = positionTooltip;
 
-  const showTooltip = (cell, event) => {
+  const showTooltip = (cell, event, immediate = false) => {
     const text = cell.dataset.matrixTooltip;
     if (!text) {
       hideTooltip();
@@ -880,13 +903,26 @@ function setupMatrixHoverHighlight() {
     if (tooltipTimer !== null) clearTimeout(tooltipTimer);
     tooltipCell = cell;
     tooltip.hidden = true;
-    tooltipTimer = setTimeout(() => {
+    const render = () => {
       tooltipTimer = null;
       if (tooltipCell !== cell || !table.contains(cell)) return;
       tooltip.textContent = text;
       tooltip.hidden = false;
       positionTooltip();
-    }, 250);
+    };
+    if (immediate) {
+      render();
+    } else {
+      tooltipTimer = setTimeout(render, 250);
+    }
+  };
+  table.__showMatrixTooltip = (cell, immediate = false) => {
+    if (!cell) return;
+    const rect = cell.getBoundingClientRect();
+    showTooltip(cell, {
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2
+    }, immediate);
   };
 
   const clearHighlight = () => {
@@ -941,7 +977,7 @@ function setupMatrixHoverHighlight() {
       hideTooltip();
     }
   );
-  window.addEventListener('scroll', hideTooltip, true);
+  window.addEventListener('scroll', positionTooltip, true);
   window.addEventListener('resize', positionTooltip);
 }
 

@@ -15,7 +15,6 @@ function showInlineSelect(
       oldSelect.remove();
     }
   }
-
   const wrapper = document.createElement('div');
 
   wrapper.className = 'inline-select';
@@ -64,6 +63,8 @@ function showInlineSelect(
   wrapper.appendChild(select);
   document.body.appendChild(wrapper);
 
+  const matrixTable = document.getElementById('iluTable');
+
   let closed = false;
 
   const removeListeners = () => {
@@ -77,6 +78,9 @@ function showInlineSelect(
     closed = true;
     removeListeners();
     wrapper.remove();
+    if (matrixTable?.__repositionMatrixTooltip) {
+      matrixTable.__repositionMatrixTooltip();
+    }
   };
 
   // Позволяет корректно закрыть список при открытии другого списка,
@@ -179,6 +183,14 @@ function showInlineSelect(
   };
 
   reposition();
+
+  // Сначала выставляем реальные координаты списка, затем позиционируем tooltip.
+  if (matrixTable?.__showMatrixTooltip) {
+    matrixTable.__showMatrixTooltip(cell, true);
+  }
+  if (matrixTable?.__repositionMatrixTooltip) {
+    matrixTable.__repositionMatrixTooltip();
+  }
 
   window.addEventListener('resize', reposition);
   window.addEventListener('scroll', reposition, true);
