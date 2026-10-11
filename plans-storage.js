@@ -1460,3 +1460,132 @@ window.addEventListener('focus', applyAutomaticRotation);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) applyAutomaticRotation();
 });
+
+// Общая подсказка календарей: только пост и календарная дата.
+(function setupCalendarTooltip() {
+  if (document.__iluCalendarTooltipBound) return;
+  document.__iluCalendarTooltipBound = true;
+  let tooltip;
+  let activeCell = null;
+  let tooltipTimer = null;
+  let editing = false;
+  const hide = () => {
+    if (editing) return;
+    if (tooltipTimer !== null) {
+      clearTimeout(tooltipTimer);
+      tooltipTimer = null;
+    }
+    activeCell = null;
+    if (tooltip) tooltip.hidden = true;
+  };
+  const position = () => {
+    if (!activeCell || !activeCell.isConnected || !tooltip || tooltip.hidden) return hide();
+    const anchor = activeCell.getBoundingClientRect();
+    if (anchor.bottom <= 0 || anchor.top >= innerHeight || anchor.right <= 0 || anchor.left >= innerWidth) return hide();
+    const size = tooltip.getBoundingClientRect();
+    const gap = 10;
+    const obstacles = Array.from(document.querySelectorAll('.inline-select, .context-menu'))
+      .filter(element => element.getClientRects().length)
+      .map(element => element.getBoundingClientRect());
+    const candidates = [];
+    for (const rect of [anchor, ...obstacles]) {
+      candidates.push(
+        {left: rect.right + gap, top: rect.top},
+        {left: rect.left - size.width - gap, top: rect.top},
+        {left: rect.left, top: rect.top - size.height - gap},
+        {left: rect.left, top: rect.bottom + gap}
+      );
+    }
+    const clamp = (value, max) => Math.max(8, Math.min(value, Math.max(8, max)));
+    const safe = candidates.map(candidate => ({
+      left: clamp(candidate.left, innerWidth - size.width - 8),
+      top: clamp(candidate.top, innerHeight - size.height - 8)
+    })).find(candidate => !obstacles.some(rect =>
+      candidate.left < rect.right + gap && candidate.left + size.width > rect.left - gap &&
+      candidate.top < rect.bottom + gap && candidate.top + size.height > rect.top - gap
+    ));
+    if (!safe) return hide();
+    tooltip.style.left = `${safe.left}px`;
+    tooltip.style.top = `${safe.top}px`;
+  };
+  document.__iluCalendarTooltipReposition = position;
+  document.__iluCalendarTooltipShow = cell => {
+    if (!cell) return;
+    if (tooltipTimer !== null) {
+      clearTimeout(tooltipTimer);
+      tooltipTimer = null;
+    }
+    const table = cell.closest('#devCalendarTable, #rotCalendarTable');
+    const view = table?.id === 'devCalendarTable'
+      ? window.developmentPlanViewDate : window.rotationPlanViewDate;
+    if (!table || !(view instanceof Date) || cell.dataset.duration === 'true') return hide();
+    editing = true;
+    const day = Number(cell.dataset.day) + 1;
+    if (!cell.hasAttribute('data-day')) return hide();
+    if (!tooltip) {
+      tooltip = document.createElement('div');
+      tooltip.className = 'matrix-hover-tooltip';
+      tooltip.setAttribute('role', 'tooltip');
+      tooltip.style.position = 'fixed';
+      tooltip.style.pointerEvents = 'none';
+      document.body.appendChild(tooltip);
+    }
+    activeCell = cell;
+    const post = cell.parentElement.cells[0].textContent.trim();
+    const date = `${String(day).padStart(2, '0')}.${String(view.getMonth() + 1).padStart(2, '0')}.${view.getFullYear()}`;
+    tooltip.textContent = `Пост: ${post}\nДата: ${date}`;
+    tooltip.hidden = false;
+    position();
+  };
+  document.__iluCalendarTooltipEndEditing = () => {
+    editing = false;
+    hide();
+  };
+  const editorObserver = new MutationObserver(() => {
+    if (editing && !document.querySelector('.context-menu, .inline-select')) {
+      document.__iluCalendarTooltipEndEditing();
+    }
+  });
+  editorObserver.observe(document.body, { childList: true, subtree: true });
+  document.addEventListener('mouseover', event => {
+    const cell = event.target.closest('td');
+    const table = cell?.closest('#devCalendarTable, #rotCalendarTable');
+    if (!table || cell.dataset.duration === 'true') return hide();
+    const view = table.id === 'devCalendarTable'
+      ? window.developmentPlanViewDate : window.rotationPlanViewDate;
+    if (!(view instanceof Date)) return hide();
+    const day = Number(cell.dataset.day) + 1;
+    const days = new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
+    if (!cell.hasAttribute('data-day') || day < 1 || day > days || cell.cellIndex === 0) return hide();
+    if (activeCell === cell) return;
+    if (tooltipTimer !== null) clearTimeout(tooltipTimer);
+    tooltipTimer = null;
+    if (!tooltip) {
+      tooltip = document.createElement('div');
+      tooltip.className = 'matrix-hover-tooltip';
+      tooltip.setAttribute('role', 'tooltip');
+      tooltip.style.position = 'fixed';
+      tooltip.style.pointerEvents = 'none';
+      document.body.appendChild(tooltip);
+    }
+    activeCell = cell;
+    const post = cell.parentElement.cells[0].textContent.trim();
+    const date = `${String(day).padStart(2, '0')}.${String(view.getMonth() + 1).padStart(2, '0')}.${view.getFullYear()}`;
+    tooltip.textContent = `Пост: ${post}\nДата: ${date}`;
+    cell.removeAttribute('title');
+    tooltip.hidden = true;
+    tooltipTimer = setTimeout(() => {
+      tooltipTimer = null;
+      if (activeCell !== cell || !cell.isConnected) return;
+      tooltip.hidden = false;
+      position();
+    }, 250);
+  });
+  document.addEventListener('mouseout', event => {
+    if (activeCell && !activeCell.contains(event.relatedTarget)) hide();
+  });
+  document.addEventListener('pointerdown', hide, true);
+  document.addEventListener('contextmenu', hide, true);
+  window.addEventListener('scroll', hide, true);
+  window.addEventListener('resize', position);
+})();

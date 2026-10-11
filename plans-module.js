@@ -694,6 +694,12 @@ function editCalendarCell(event) {
   menu.innerHTML = `<div class="danger" onclick="deleteCalendarTraining('${opName}', 'past'); hideMenu();">🗑️ Удалить прошедшие обучения</div><div class="danger" onclick="deleteCalendarTraining('${opName}', 'future'); hideMenu();">🗑️ Удалить будущие обучения</div>`;
   document.body.appendChild(menu);
   positionPlanContextMenu(menu, event);
+  if (typeof document.__iluCalendarTooltipReposition === 'function') {
+    document.__iluCalendarTooltipReposition();
+  }
+  if (typeof document.__iluCalendarTooltipShow === 'function') {
+    document.__iluCalendarTooltipShow(td);
+  }
   currentMenu = menu;
   setTimeout(() => document.addEventListener('click', hideMenu, { once: true }), 0);
 }
@@ -784,6 +790,12 @@ function addCalendarTraining(event) {
   menu.innerHTML = html;
   document.body.appendChild(menu);
   positionPlanContextMenu(menu, event);
+  if (typeof document.__iluCalendarTooltipReposition === 'function') {
+    document.__iluCalendarTooltipReposition();
+  }
+  if (typeof document.__iluCalendarTooltipShow === 'function') {
+    document.__iluCalendarTooltipShow(td);
+  }
   currentMenu = menu;
   setTimeout(() => document.addEventListener('click', hideMenu, { once: true }), 0);
 }
