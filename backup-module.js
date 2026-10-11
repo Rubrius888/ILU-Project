@@ -110,9 +110,34 @@ function normalizePlans(plans) {
     throw new Error('Планы имеют неверный формат');
   }
 
+  const objectOrNull = (value, name) => {
+    if (value !== null && value !== undefined &&
+        (typeof value !== 'object' || Array.isArray(value))) {
+      throw new Error(`Поле планов ${name} имеет неверный формат`);
+    }
+    return value || null;
+  };
+  const historyOrEmpty = (value, name) => {
+    if (value === undefined) return {};
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error(`История планов ${name} имеет неверный формат`);
+    }
+    return value;
+  };
+  const settingsOrDefault = (value, name) => {
+    if (value === undefined) return {};
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error(`Настройки планов ${name} имеют неверный формат`);
+    }
+    return value;
+  };
   return {
-    development: plans.development || null,
-    rotation: plans.rotation || null
+    development: objectOrNull(plans.development, 'development'),
+    developmentHistory: historyOrEmpty(plans.developmentHistory, 'development'),
+    developmentSettings: settingsOrDefault(plans.developmentSettings, 'development'),
+    rotation: objectOrNull(plans.rotation, 'rotation'),
+    rotationHistory: historyOrEmpty(plans.rotationHistory, 'rotation'),
+    rotationSettings: settingsOrDefault(plans.rotationSettings, 'rotation')
   };
 }
 
@@ -393,26 +418,42 @@ async function importApplicationBackup(event) {
       return;
     }
 
-    // Перед заменой автоматически скачиваем текущую версию.
-    try {
-      downloadBackup(
-        createApplicationBackup(),
-        'ilu-se4-before-import'
-      );
-    } catch (error) {
-      console.warn('Не удалось создать копию перед импортом:', error);
-    }
+    // Защитная копия обязательна: при ошибке её формирования импорт не продолжается.
+    const protectiveBackup = createApplicationBackup();
+    downloadBackup(protectiveBackup, 'ilu-se4-before-import');
 
     const keys = getApplicationStorageKeys();
+    const previousState = localStorage.getItem(keys.state);
+    const previousPlans = localStorage.getItem(keys.plans);
+    const nextState = JSON.stringify(backup.state);
+    const nextPlans = JSON.stringify(normalizePlans(backup.plans || {}));
 
-    localStorage.setItem(
-      keys.state,
-      JSON.stringify(backup.state)
-    );
-    localStorage.setItem(
-      keys.plans,
-      JSON.stringify(normalizePlans(backup.plans || {}))
-    );
+    try {
+      localStorage.setItem(keys.state, nextState);
+      localStorage.setItem(keys.plans, nextPlans);
+      if (localStorage.getItem(keys.state) !== nextState ||
+          localStorage.getItem(keys.plans) !== nextPlans) {
+        throw new Error('Проверка записи импортируемой базы не пройдена');
+      }
+    } catch (writeError) {
+      let rollbackError = null;
+      try {
+        if (previousState === null) localStorage.removeItem(keys.state);
+        else localStorage.setItem(keys.state, previousState);
+        if (previousPlans === null) localStorage.removeItem(keys.plans);
+        else localStorage.setItem(keys.plans, previousPlans);
+        if (localStorage.getItem(keys.state) !== previousState ||
+            localStorage.getItem(keys.plans) !== previousPlans) {
+          throw new Error('Проверка отката не пройдена');
+        }
+      } catch (error) {
+        rollbackError = error;
+      }
+      if (rollbackError) {
+        throw new Error(`Ошибка импорта и отката исходных данных: ${writeError.message}; ${rollbackError.message}`);
+      }
+      throw new Error(`Импорт отменён, исходные данные восстановлены: ${writeError.message}`);
+    }
 
     alert('База успешно загружена. Приложение будет перезапущено.');
     location.reload();

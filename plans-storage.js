@@ -479,8 +479,9 @@ function updateDevelopmentMonthLabel() {
   const nextDate = new Date(date.getFullYear(), date.getMonth() + 1, 1);
   if (previous) previous.disabled = false;
   if (next) {
-    next.disabled = !getDevelopmentSnapshot(nextDate.getFullYear(), nextDate.getMonth()) &&
-      !(nextDate.getFullYear() === current.getFullYear() && nextDate.getMonth() === current.getMonth());
+    // Будущий месяц доступен для просмотра и первичной генерации
+    // даже при отсутствии сохранённого snapshot.
+    next.disabled = false;
   }
   const currentButton = document.getElementById('developmentCurrentMonth');
   if (currentButton) {
