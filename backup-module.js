@@ -3,6 +3,7 @@ const BACKUP_VERSION = 1;
 
 const STATE_KEY = 'ilu-se4-state-v1';
 const PLANS_KEY = 'ilu-se4-plans-v1';
+let importInProgress = false;
 
 function validateState(state) {
   if (!state || typeof state !== 'object') {
@@ -208,15 +209,29 @@ function validateBackup(backup) {
   ) {
     throw new Error('Некорректные данные планов');
   }
+  ['developmentHistory', 'rotationHistory'].forEach(key => {
+    if (backup.plans[key] !== undefined &&
+        (typeof backup.plans[key] !== 'object' || Array.isArray(backup.plans[key]))) {
+      throw new Error(`Некорректная структура планов: ${key}`);
+    }
+  });
 }
 
 async function importApplicationBackup(event) {
+  if (importInProgress) {
+    alert('Импорт базы уже выполняется. Дождитесь его завершения.');
+    return;
+  }
   const input = event.target;
   const file = input.files[0];
 
   if (!file) {
     return;
   }
+
+  importInProgress = true;
+  const previousState = localStorage.getItem(STATE_KEY);
+  const previousPlans = localStorage.getItem(PLANS_KEY);
 
   try {
     const backup = await readBackupFile(file);
@@ -244,15 +259,16 @@ async function importApplicationBackup(event) {
       );
     }
 
-    localStorage.setItem(
-      STATE_KEY,
-      JSON.stringify(backup.state)
-    );
-
-    localStorage.setItem(
-      PLANS_KEY,
-      JSON.stringify(backup.plans)
-    );
+    try {
+      localStorage.setItem(STATE_KEY, JSON.stringify(backup.state));
+      localStorage.setItem(PLANS_KEY, JSON.stringify(backup.plans));
+    } catch (writeError) {
+      if (previousState === null) localStorage.removeItem(STATE_KEY);
+      else localStorage.setItem(STATE_KEY, previousState);
+      if (previousPlans === null) localStorage.removeItem(PLANS_KEY);
+      else localStorage.setItem(PLANS_KEY, previousPlans);
+      throw new Error(`Не удалось сохранить импортированную базу: ${writeError.message}`);
+    }
 
     alert(
       'База загружена. Приложение будет перезапущено.'
@@ -266,6 +282,7 @@ async function importApplicationBackup(event) {
       `Не удалось загрузить базу: ${error.message}`
     );
   } finally {
+    importInProgress = false;
     input.value = '';
   }
 }

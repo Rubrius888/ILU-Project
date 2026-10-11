@@ -1,9 +1,14 @@
 const STORAGE_KEY = 'ilu-se4-state-v1';
 
 let storageCanSave = true;
+let storageLoadError = null;
 
 function saveState() {
   if (!storageCanSave) {
+    return false;
+  }
+  if (storageLoadError) {
+    console.warn('Сохранение пропущено: сохранённая база не была восстановлена.');
     return false;
   }
 
@@ -19,8 +24,8 @@ function saveState() {
     data,
     trainingRecords,
     placementLog,
-    placementInitialPlacementDate,
-    statsHistory,
+    placementFilters,
+    placementSort,
     workshopChief,
     sectionChief,
     filters: filterState
@@ -48,6 +53,7 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
 
     if (!raw) {
+      storageLoadError = null;
       return false;
     }
 
@@ -120,14 +126,42 @@ function loadState() {
     data = state.data;
     trainingRecords = state.trainingRecords;
     placementLog = state.placementLog;
-    placementInitialPlacementDate =
-      typeof state.placementInitialPlacementDate === 'string'
-        ? state.placementInitialPlacementDate
-        : '';
 
-    statsHistory = Array.isArray(state.statsHistory)
-      ? state.statsHistory
-      : [];
+    if (
+      state.placementFilters &&
+      typeof state.placementFilters === 'object'
+    ) {
+      placementFilters = {
+        dateFrom:
+          typeof state.placementFilters.dateFrom === 'string'
+            ? state.placementFilters.dateFrom
+            : '',
+        dateTo:
+          typeof state.placementFilters.dateTo === 'string'
+            ? state.placementFilters.dateTo
+            : '',
+        operators: Array.isArray(state.placementFilters.operators)
+          ? state.placementFilters.operators
+          : [],
+        posts: Array.isArray(state.placementFilters.posts)
+          ? state.placementFilters.posts
+          : []
+      };
+    }
+
+    if (
+      state.placementSort &&
+      typeof state.placementSort === 'object'
+    ) {
+      placementSort = {
+        key:
+          typeof state.placementSort.key === 'string'
+            ? state.placementSort.key
+            : 'date',
+        direction:
+          state.placementSort.direction === 'asc' ? 'asc' : 'desc'
+      };
+    }
 
     workshopChief =
       typeof state.workshopChief === 'string'
@@ -166,8 +200,10 @@ function loadState() {
       };
     }
 
+    storageLoadError = null;
     return true;
   } catch (error) {
+    storageLoadError = error;
     console.error(
       'Не удалось загрузить сохранённые данные:',
       error

@@ -176,7 +176,7 @@ function validateNoActiveRotationChain(previous, year, month) {
   }
 }
 
-function capturePlan(type, tableId) {
+function capturePlan(type, tableId, preserveHistory = false) {
   const table = document.getElementById(tableId);
   if (!table || !table.tHead || !table.tBodies[0]) return;
 
@@ -195,7 +195,7 @@ function capturePlan(type, tableId) {
     const month = viewDate.getMonth();
     const key = planMonthKey(year, month);
     const previous = getDevelopmentSnapshot(year, month);
-    rows = mergeCurrentMonthHistory(type, previous, rows, year, month);
+    if (preserveHistory) rows = mergeCurrentMonthHistory(type, previous, rows, year, month);
     const generationMeta = window.lastDevelopmentGenerationMeta;
     const meta = generationMeta?.year === year && generationMeta?.month === month
       ? generationMeta
@@ -230,7 +230,7 @@ function capturePlan(type, tableId) {
     const key = planMonthKey(year, month);
     const previous = getRotationSnapshot(year, month);
     validateNoActiveRotationChain(previous, year, month);
-    rows = mergeCurrentMonthHistory(type, previous, rows, year, month);
+    if (preserveHistory) rows = mergeCurrentMonthHistory(type, previous, rows, year, month);
     const generationMeta = window.lastRotationGenerationMeta;
     const generatedForMonth = generationMeta?.year === year && generationMeta?.month === month;
     const meta = generatedForMonth ? generationMeta : (previous || {});
@@ -1395,7 +1395,7 @@ function wrapPlanGenerator(type, functionName, tableId, color) {
           validateNoActiveRotationChain(getRotationSnapshot(viewDate.getFullYear(), viewDate.getMonth()), viewDate.getFullYear(), viewDate.getMonth());
         }
         originalFunction.apply(this, arguments);
-        capturePlan(type, tableId);
+        capturePlan(type, tableId, true);
         restorePlan(type, tableId, color);
         if (type === 'rotation') applyAutomaticRotation();
       } catch (error) {
@@ -1418,7 +1418,7 @@ function wrapPlanChange(type, functionName, tableId, color) {
   window[functionName] = function () {
     if (type === 'rotation') window.lastRotationGenerationMeta = null;
     const result = originalFunction.apply(this, arguments);
-    capturePlan(type, tableId);
+    capturePlan(type, tableId, false);
     restorePlan(type, tableId, color);
     return result;
   };

@@ -1,5 +1,8 @@
 
 const restoredState = loadState();
+const storedStateExists = Boolean(
+  localStorage.getItem('ilu-se4-state-v1')
+);
 
 /*
  * Новая установка должна открываться как чистый шаблон.
@@ -7,7 +10,7 @@ const restoredState = loadState();
  * данные разработчика. На компьютере владельца loadState() вернёт true,
  * поэтому его существующая матрица будет восстановлена без изменений.
  */
-if (!restoredState) {
+if (!restoredState && !storedStateExists) {
   posts = [];
   operators = [];
   difficulty = [];
@@ -19,7 +22,6 @@ if (!restoredState) {
   data = [];
   trainingRecords = [];
   placementLog = [];
-  placementInitialPlacementDate = '';
   statsHistory = [];
   placementFilters = {
     dateFrom: '',
@@ -33,6 +35,15 @@ if (!restoredState) {
   };
   workshopChief = '';
   sectionChief = '';
+}
+
+if (!restoredState && storedStateExists && storageLoadError) {
+  setTimeout(() => {
+    alert(
+      'Сохранённая база не может быть восстановлена. Данные не перезаписаны. ' +
+      'Используйте импорт JSON для восстановления базы.'
+    );
+  }, 0);
 }
 
 //Восстановление фильтров департамент, цех, участок, смена
@@ -172,8 +183,8 @@ restoreSavedFilters();
 restoreInfoCardsState();
 updateDateBar();
 updateInfoCard();
-if (typeof ensureDailyInitialPlacement === 'function') {
-  ensureDailyInitialPlacement();
+if (typeof ensurePrimaryPlacementEvents === 'function') {
+  ensurePrimaryPlacementEvents();
 }
 renderMatrix();
 renderTrainingTable();

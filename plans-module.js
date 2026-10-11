@@ -691,21 +691,35 @@ function editCalendarCell(event) {
 
   const menu = document.createElement('div');
   menu.className = 'context-menu';
-  menu.innerHTML = `<div class="danger" onclick="deleteCalendarTraining('${opName}'); hideMenu();">🗑️ Удалить все обучения</div>`;
+  menu.innerHTML = `<div class="danger" onclick="deleteCalendarTraining('${opName}', 'past'); hideMenu();">🗑️ Удалить прошедшие обучения</div><div class="danger" onclick="deleteCalendarTraining('${opName}', 'all'); hideMenu();">🗑️ Удалить все обучения за весь месяц</div>`;
   document.body.appendChild(menu);
   positionPlanContextMenu(menu, event);
   currentMenu = menu;
   setTimeout(() => document.addEventListener('click', hideMenu, { once: true }), 0);
 }
 
-function deleteCalendarTraining(opName) {
-  if (!confirm(`Удалить все обучения оператора «${opName}» из плана?`)) return;
+function deleteCalendarTraining(opName, mode = 'all') {
+  const question = mode === 'past'
+    ? `Удалить прошедшие обучения оператора «${opName}»?`
+    : `Удалить все обучения оператора «${opName}» за весь месяц?`;
+  if (!confirm(question)) return;
   const tbody = document.querySelector('#devCalendarTable tbody');
   if (!tbody) return;
+  const viewDate = window.developmentPlanViewDate instanceof Date ? window.developmentPlanViewDate : new Date();
+  const now = new Date();
+  const isCurrentMonth = viewDate.getFullYear() === now.getFullYear() && viewDate.getMonth() === now.getMonth();
+  const isFutureMonth = viewDate > new Date(now.getFullYear(), now.getMonth(), 1);
+  const cutoff = now.getDate() - 1;
   const allTd = tbody.querySelectorAll('td[data-op="' + opName + '"]');
   const affectedRows = new Set();
+  const targets = Array.from(allTd).filter(td => {
+    if (mode === 'all') return true;
+    if (isFutureMonth) return false;
+    if (!isCurrentMonth) return true;
+    return Number(td.dataset.day) < cutoff;
+  });
 
-  allTd.forEach(td => {
+  targets.forEach(td => {
     if (td.parentElement) {
       affectedRows.add(td.parentElement);
     }
