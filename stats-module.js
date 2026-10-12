@@ -1333,7 +1333,7 @@ const count = periodHistory.length;
         : 'выбранный период';
 
 status.textContent = count > 0
-  ? `Снимков за период «${periodLabel}»: ${count}. Последний: ${periodHistory[count - 1].date}`
+  ? `Снимков за период «${periodLabel}»: ${count}. Последний: ${formatStatsDate(periodHistory[count - 1].date, true)}`
   : `За период «${periodLabel}» снимков пока нет.`;
   }
 

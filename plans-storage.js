@@ -185,7 +185,9 @@ function normalizeRotationChainDates(chain, plan) {
     return candidates.length === 1 ? { ...candidates[0], year, month } : null;
   }
 
-  const matches = candidates.filter(candidate => chain.participants.every(participant => {
+  const placedParticipants = chain.participants.filter(participant => participant.toPost);
+  if (!placedParticipants.length) return null;
+  const matches = candidates.filter(candidate => placedParticipants.every(participant => {
     const rowIndex = plan.posts.indexOf(participant.toPost);
     const row = rowIndex >= 0 ? plan.rows[rowIndex] : null;
     if (!Array.isArray(row)) return false;
@@ -224,11 +226,16 @@ function mergeProtectedRotationRows(previous, rows, plan, protectedChains) {
   const merged = rows.map(row => Array.isArray(row) ? [...row] : row);
   for (const { chain, dates } of protectedChains) {
     for (const participant of chain.participants || []) {
+      if (!participant.toPost) continue;
       const rowIndex = plan.posts.indexOf(participant.toPost);
       const oldRow = previous.rows[rowIndex];
       const newRow = merged[rowIndex];
       if (!Array.isArray(oldRow) || !Array.isArray(newRow)) {
-        throw new Error(`Невозможно восстановить защищённую цепочку №${chain.id ?? '—'}.`);
+        throw new Error(
+          `Невозможно восстановить защищённую цепочку №${chain.id ?? '—'}: ` +
+          `строка поста «${participant.toPost}» отсутствует ` +
+          `(индекс ${rowIndex}, старые строки ${previous.rows.length}, новые строки ${merged.length}).`
+        );
       }
       for (let day = dates.start; day <= dates.end; day++) {
         const column = day;
