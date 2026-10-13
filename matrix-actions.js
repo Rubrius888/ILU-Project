@@ -445,6 +445,7 @@ function addOperator() {
   const name = prompt('Введите фамилию оператора:');
   if (!name || name.trim() === '') return;
   operators.push(name.trim());
+  operatorIds.push(createStableId('operator'));
   operatorAttendance.push('Я');
   operatorRoles.push('О');
   // Расширяем матрицы
@@ -460,6 +461,7 @@ function addPost() {
   const name = prompt('Введите название поста:');
   if (!name || name.trim() === '') return;
   posts.push(name.trim());
+  postIds.push(createStableId('post'));
   data.push(new Array(operators.length).fill(null));
   attendanceData.push(new Array(operators.length).fill(''));
   difficulty.push('C');
@@ -505,6 +507,7 @@ function movePost(index, direction) {
 
   // Все новые массивы формируем до публикации результата в глобальное состояние.
   const nextPosts = reorder(posts);
+  const nextPostIds = reorder(postIds);
   const nextDifficulty = reorder(difficulty);
   const nextErgonomics = reorder(ergonomics);
   const nextTrainingDays = reorder(trainingDays);
@@ -514,6 +517,7 @@ function movePost(index, direction) {
   );
 
   posts = nextPosts;
+  postIds = nextPostIds;
   difficulty = nextDifficulty;
   ergonomics = nextErgonomics;
   trainingDays = nextTrainingDays;
@@ -562,6 +566,7 @@ function moveOperator(index, direction) {
   const reorderColumns = (matrix) => matrix.map(row => reorder(row));
 
   const nextOperators = reorder(operators);
+  const nextOperatorIds = reorder(operatorIds);
   const nextOperatorAttendance = reorder(operatorAttendance);
   const nextOperatorRoles = reorder(operatorRoles);
   const nextData = reorderColumns(data.map(row => row.slice()));
@@ -570,6 +575,7 @@ function moveOperator(index, direction) {
   );
 
   operators = nextOperators;
+  operatorIds = nextOperatorIds;
   operatorAttendance = nextOperatorAttendance;
   operatorRoles = nextOperatorRoles;
   data = nextData;
@@ -585,7 +591,12 @@ function deleteOperator(name) {
   if (!confirm(`Удалить оператора «${name}»?`)) return;
   const idx = operators.indexOf(name);
   if (idx === -1) return;
+  const removedOperatorId = operatorIds[idx];
   operators.splice(idx, 1);
+  operatorIds.splice(idx, 1);
+  Object.keys(validatedCarModels).forEach(key => {
+    if (key.startsWith(`${removedOperatorId}|`)) delete validatedCarModels[key];
+  });
   operatorAttendance.splice(idx, 1);
   operatorRoles.splice(idx, 1);
   for (let r = 0; r < posts.length; r++) {
@@ -600,7 +611,12 @@ function deletePost(name) {
   if (!confirm(`Удалить пост «${name}»?`)) return;
   const idx = posts.indexOf(name);
   if (idx === -1) return;
+  const removedPostId = postIds[idx];
   posts.splice(idx, 1);
+  postIds.splice(idx, 1);
+  Object.keys(validatedCarModels).forEach(key => {
+    if (key.endsWith(`|${removedPostId}`)) delete validatedCarModels[key];
+  });
   data.splice(idx, 1);
   attendanceData.splice(idx, 1);
   difficulty.splice(idx, 1);

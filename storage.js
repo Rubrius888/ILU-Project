@@ -14,7 +14,10 @@ function saveState() {
 
   const state = {
     posts,
+    postIds,
     operators,
+    operatorIds,
+    validatedCarModels,
     difficulty,
     ergonomics,
     trainingDays,
@@ -59,6 +62,8 @@ function loadState() {
     }
 
     const state = JSON.parse(raw);
+    const validIds = (ids, count) => Array.isArray(ids) && ids.length === count &&
+      ids.every(id => typeof id === 'string' && id) && new Set(ids).size === ids.length;
 
     const arrays = [
       'posts',
@@ -84,6 +89,12 @@ function loadState() {
 
     const postCount = state.posts.length;
     const operatorCount = state.operators.length;
+    if (state.postIds !== undefined && !validIds(state.postIds, postCount)) {
+      throw new Error('Некорректные идентификаторы постов');
+    }
+    if (state.operatorIds !== undefined && !validIds(state.operatorIds, operatorCount)) {
+      throw new Error('Некорректные идентификаторы операторов');
+    }
 
     if (
       state.difficulty.length !== postCount ||
@@ -118,6 +129,17 @@ function loadState() {
 
     posts = state.posts;
     operators = state.operators;
+    postIds = validIds(state.postIds, posts.length)
+      ? [...state.postIds]
+      : posts.map(() => createStableId('post'));
+    operatorIds = validIds(state.operatorIds, operators.length)
+      ? [...state.operatorIds]
+      : operators.map(() => createStableId('operator'));
+    validatedCarModels = state.validatedCarModels &&
+      typeof state.validatedCarModels === 'object' &&
+      !Array.isArray(state.validatedCarModels)
+      ? state.validatedCarModels
+      : {};
     difficulty = state.difficulty;
     ergonomics = state.ergonomics;
     trainingDays = state.trainingDays;

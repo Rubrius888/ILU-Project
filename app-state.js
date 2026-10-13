@@ -298,6 +298,11 @@ let posts = [
   "Пост 115 Подсборка стёкол",
   "Пост ПН мастики"
 ];
+function createStableId(prefix) {
+  if (globalThis.crypto?.randomUUID) return `${prefix}_${globalThis.crypto.randomUUID()}`;
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+let postIds = posts.map(() => createStableId('post'));
 
 // Список операторов на участке (19 человек)
 let operators = [
@@ -306,6 +311,8 @@ let operators = [
   "Бортников С.", "Копин А.", "Ордин А.", "Грачёв Д.", "Нуралиев А.",
   "Кожемякин Д.", "Самбуров И.", "Фролова А.", "Сайидов Р."
 ];
+let operatorIds = operators.map(() => createStableId('operator'));
+let validatedCarModels = {};
 
 // Сложность каждого поста: A (красный), B (жёлтый), C (зелёный). По умолчанию C.
 let difficulty = [

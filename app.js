@@ -12,7 +12,10 @@ const storedStateExists = Boolean(
  */
 if (!restoredState && !storedStateExists) {
   posts = [];
+  postIds = [];
   operators = [];
+  operatorIds = [];
+  validatedCarModels = {};
   difficulty = [];
   ergonomics = [];
   trainingDays = [];

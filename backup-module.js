@@ -58,6 +58,18 @@ function validateApplicationState(state) {
 
   const postCount = state.posts.length;
   const operatorCount = state.operators.length;
+  const validIds = (ids, count) => Array.isArray(ids) && ids.length === count &&
+    ids.every(id => typeof id === 'string' && id) && new Set(ids).size === ids.length;
+  if (state.postIds !== undefined && !validIds(state.postIds, postCount)) {
+    throw new Error('Некорректные идентификаторы постов');
+  }
+  if (state.operatorIds !== undefined && !validIds(state.operatorIds, operatorCount)) {
+    throw new Error('Некорректные идентификаторы операторов');
+  }
+  if (state.validatedCarModels !== undefined &&
+      (!state.validatedCarModels || typeof state.validatedCarModels !== 'object' || Array.isArray(state.validatedCarModels))) {
+    throw new Error('Некорректная валидация моделей автомобилей');
+  }
 
   if (
     state.difficulty.length !== postCount ||

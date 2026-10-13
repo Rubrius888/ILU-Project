@@ -795,9 +795,8 @@ function deleteTrainingRecord(index) {
 
   renderTrainingTable();
 
-  if (placementCleared) {
-    renderMatrix();
-  }
+  // Removing the last record changes the computed matrix validation.
+  renderMatrix();
 }
 
 function applyTrainingValidation(record) {
@@ -1330,6 +1329,7 @@ function renderTrainingTable() {
     'op',
     'level',
     'status',
+    null,
     'formator',
     'startDate',
     'validDate',
@@ -1347,6 +1347,7 @@ function renderTrainingTable() {
     'Оператор',
     'Уровень',
     'Статус',
+    'Автомобиль',
     'Форматор',
     'Дата начала обучения',
     'Дата валидации',
@@ -1414,7 +1415,7 @@ function renderTrainingTable() {
     tbody.innerHTML = `
       <tr>
         <td
-          colspan="14"
+          colspan="15"
           style="
             text-align:center;
             color:#94a3b8;
@@ -1436,7 +1437,7 @@ function renderTrainingTable() {
     tbody.innerHTML = `
       <tr>
         <td
-          colspan="14"
+          colspan="15"
           style="
             text-align:center;
             color:#94a3b8;
@@ -1455,6 +1456,16 @@ function renderTrainingTable() {
     .map(item => {
       const r = item.record;
       const i = item.originalIndex;
+      const operatorId = operatorIds[operators.indexOf(r.op)];
+      const postId = postIds[posts.indexOf(r.post)];
+      const models = operatorId && postId && Array.isArray(validatedCarModels[`${operatorId}|${postId}`])
+        ? validatedCarModels[`${operatorId}|${postId}`] : [];
+      const modelChecks = ['А1', 'М3'].map(model =>
+        `<label style="display:inline-flex;gap:3px;align-items:center;margin-right:5px;white-space:nowrap;">
+          <input type="checkbox" ${models.includes(model) ? 'checked' : ''}
+            onchange="toggleValidatedCarModel(${i}, '${model}', this.checked)"> ${model}
+        </label>`
+      ).join('');
 
       return `
         <tr>
@@ -1472,6 +1483,8 @@ function renderTrainingTable() {
           >
             ${r.status}
           </td>
+
+          <td>${modelChecks}</td>
 
           <td>${r.formator}</td>
 
@@ -1505,6 +1518,24 @@ function renderTrainingTable() {
       `;
     })
     .join('');
+}
+
+function toggleValidatedCarModel(recordIndex, model, checked) {
+  if (!['А1', 'М3'].includes(model)) return;
+  const record = trainingRecords[recordIndex];
+  if (!record) return;
+  const operatorId = operatorIds[operators.indexOf(record.op)];
+  const postId = postIds[posts.indexOf(record.post)];
+  if (!operatorId || !postId) return;
+  const key = `${operatorId}|${postId}`;
+  const models = new Set(Array.isArray(validatedCarModels[key]) ? validatedCarModels[key] : []);
+  if (checked) models.add(model); else models.delete(model);
+  const next = [...models].filter(value => ['А1', 'М3'].includes(value));
+  if (next.length) validatedCarModels[key] = next;
+  else delete validatedCarModels[key];
+  saveState();
+  renderTrainingTable();
+  if (typeof renderMatrix === 'function') renderMatrix();
 }
 
 function showTrainingDateEditor(currentValue, onSave) {

@@ -4,6 +4,19 @@ function isOtherSectorOperator(index) {
   return operatorRoles[index] === 'ДС';
 }
 
+function getMatrixValidatedCarModels(row, column) {
+  if (!['L', 'U', 'I'].includes(data[row]?.[column])) return [];
+  const operatorId = operatorIds[column];
+  const postId = postIds[row];
+  const hasRecord = trainingRecords.some(record =>
+    (record.operatorId ? record.operatorId === operatorId : record.op === operators[column]) &&
+    (record.postId ? record.postId === postId : record.post === posts[row])
+  );
+  if (!hasRecord) return ['А1', 'М3'];
+  const saved = validatedCarModels[`${operatorId}|${postId}`];
+  return ['А1', 'М3'].filter(model => Array.isArray(saved) && saved.includes(model));
+}
+
 function renderMatrix() {
   const thead = document.querySelector('#iluTable thead');
   const tbody = document.querySelector('#iluTable tbody');
@@ -357,9 +370,12 @@ function renderMatrix() {
       tdLvl.dataset.operatorIndex = c;
       tdLvl.textContent = level || '';
       tdLvl.className = 'cell';
+      const models = getMatrixValidatedCarModels(r, c);
+      const validationText = ['L', 'U', 'I'].includes(level)
+        ? (models.length ? `Валидирован: ${models.join(', ')}` : 'Валидация не указана.')
+        : '';
       tdLvl.dataset.matrixTooltip =
-        `${postName}\n` +
-        `${operators[c]}`;
+        `${postName}\n${operators[c]}` + (validationText ? `\n${validationText}` : '');
 
       if (level === 'Iкр') {
         tdLvl.classList.add('level-I');
