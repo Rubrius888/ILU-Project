@@ -491,6 +491,31 @@
 
       </div>
 
+      <div class="rotation-charts-row">
+      <section class="stats-panel rotation-performance-panel">
+        <div class="stats-panel-heading"><h3>Ротация операторов</h3><span>по утверждённым планам и журналу</span></div>
+        <div class="rotation-performance-controls">
+          <button type="button" onclick="setRotationStatsPeriod('month')">Месяц</button>
+          <button type="button" onclick="setRotationStatsPeriod('year')">Год</button>
+          <button type="button" onclick="setRotationStatsPeriod('all')">Всё время</button>
+          <select id="rotationStatsYear" onchange="rotationStatsYear=Number(this.value);renderRotationPerformance()"></select>
+          <select id="rotationStatsMonth" onchange="rotationStatsMonth=Number(this.value);renderRotationPerformance()"></select>
+        </div>
+        <div id="rotationPerformanceBlock" class="stats-chart" aria-live="polite"></div>
+      </section>
+      <section class="stats-panel rotation-performance-panel">
+        <div class="stats-panel-heading"><h3>Соблюдение плана ротации</h3><span>по заполненным ячейкам</span></div>
+        <div class="rotation-performance-controls">
+          <button type="button" onclick="setRotationCompliancePeriod('month')">Месяц</button>
+          <button type="button" onclick="setRotationCompliancePeriod('year')">Год</button>
+          <button type="button" onclick="setRotationCompliancePeriod('all')">Всё время</button>
+          <select id="rotationComplianceYear" onchange="rotationComplianceYear=Number(this.value);renderRotationCompliance()"></select>
+          <select id="rotationComplianceMonth" onchange="rotationComplianceMonth=Number(this.value);renderRotationCompliance()"></select>
+        </div>
+        <div id="rotationComplianceBlock" class="stats-chart" aria-live="polite"></div>
+      </section>
+      </div>
+
       <div class="stats-dashboard-grid">
 
   <section class="stats-panel stats-polyvalence-panel">

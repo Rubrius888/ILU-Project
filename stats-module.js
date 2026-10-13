@@ -1244,6 +1244,159 @@ function renderAttendanceRatingChart() {
   }).join('');
 }
 
+let rotationStatsMode = 'month';
+let rotationStatsYear = new Date().getFullYear();
+let rotationStatsMonth = new Date().getMonth();
+let rotationComplianceMode = 'month';
+let rotationComplianceYear = new Date().getFullYear();
+let rotationComplianceMonth = new Date().getMonth();
+function setRotationCompliancePeriod(mode) { rotationComplianceMode = mode; renderRotationCompliance(); }
+
+function calculateRotationCompliance() {
+  const history = savedPlans?.rotationHistory || {};
+  const allowed = new Set((operators || []).filter((name, index) => name && !new Set(['НУ','СО','ДС']).has(operatorRoles?.[index])));
+  const points = [];
+  Object.keys(history).sort().forEach(key => {
+    const plan = history[key];
+    if (!plan || !isRotationApproved(plan.year, plan.month)) return;
+    if (rotationComplianceMode === 'month' && (plan.year !== rotationComplianceYear || plan.month !== rotationComplianceMonth)) return;
+    if (rotationComplianceMode === 'year' && plan.year !== rotationComplianceYear) return;
+    let total = 0, green = 0;
+    (plan.rows || []).forEach((row, rowIndex) => (row || []).slice(1).forEach((value, dayIndex) => {
+      const name = String(value || '').trim();
+      if (!name || name === '+' || name.startsWith('ДС:') || !allowed.has(name)) return;
+      total++;
+      if (rotationFactState(name, (plan.posts || posts)[rowIndex], plan.year, plan.month, dayIndex + 1) === 'green') green++;
+    }));
+    points.push({ key, label: new Date(plan.year, plan.month, 1).toLocaleDateString('ru-RU', { month:'long', year:'numeric' }), total, green, percent: total ? green / total * 100 : null });
+  });
+  return { points };
+}
+
+function renderRotationCompliance() {
+  const host = document.getElementById('rotationComplianceBlock'); if (!host) return;
+  const year = document.getElementById('rotationComplianceYear'), month = document.getElementById('rotationComplianceMonth');
+  if (year && !year.options.length) { const years = [...new Set(Object.values(savedPlans?.rotationHistory || {}).map(p=>p.year).filter(Boolean))]; if (!years.includes(rotationComplianceYear)) years.push(rotationComplianceYear); year.innerHTML = years.sort().map(y=>`<option value="${y}">${y}</option>`).join(''); }
+  if (month && !month.options.length) month.innerHTML = Array.from({length:12},(_,m)=>`<option value="${m}">${new Date(2000,m,1).toLocaleDateString('ru-RU',{month:'long'})}</option>`).join('');
+  if (year) { year.value=rotationComplianceYear; year.hidden=rotationComplianceMode==='all'; } if (month) { month.value=rotationComplianceMonth; month.hidden=rotationComplianceMode!=='month'; }
+  const result=calculateRotationCompliance(), points=result.points.filter(p=>p.percent!==null); const total=result.points.reduce((n,p)=>n+p.total,0), green=result.points.reduce((n,p)=>n+p.green,0);
+  if (!points.length || !total) { host.innerHTML='<div class="stats-chart-empty">Нет данных для расчёта соблюдения плана.</div>'; return; }
+  const percent=green/total*100, width=Math.max(360,host.clientWidth||640), height=190,left=42,right=16,top=14,bottom=34,chartW=width-left-right,chartH=height-top-bottom,gap=12,bw=Math.max(18,(chartW-gap*(points.length-1))/points.length);
+  const y=v=>top+chartH-v/100*chartH;
+  const bars=points.map((p,i)=>{const h=p.percent/100*chartH,x=left+i*(bw+gap), label=p.percent.toLocaleString('ru-RU',{maximumFractionDigits:1})+'%', inside=h>=28;return `<g class="rotation-bar"><title>${p.label}\nВыполнено: ${p.green} из ${p.total} ячеек\nСоблюдение плана: ${label}</title><rect x="${x}" y="${y(p.percent)}" width="${bw}" height="${h}" rx="5" fill="#2563eb"/><text x="${x+bw/2}" y="${inside?y(p.percent)+18:y(p.percent)-6}" text-anchor="middle" class="rotation-bar-value" fill="${inside?'#fff':'#1e3a8a'}">${label}</text><text x="${x+bw/2}" y="${top+chartH+22}" text-anchor="middle" class="chart-axis-label">${p.label}</text></g>`;}).join('');
+  const grid=[0,25,50,75,100].map(v=>`<line x1="${left}" y1="${y(v)}" x2="${width-right}" y2="${y(v)}" class="chart-grid-line"/><text x="${left-8}" y="${y(v)+4}" class="chart-axis-label" text-anchor="end">${v}%</text>`).join('');
+  host.innerHTML=`<div class="rotation-performance-summary">Выполнено: <b>${green}</b> из <b>${total}</b> ячеек. Соблюдение плана: <b>${percent.toLocaleString('ru-RU',{maximumFractionDigits:1})}%</b>.</div><div class="rotation-bar-scroll"><svg class="stats-line-chart rotation-performance-chart rotation-bar-chart" viewBox="0 0 ${width} ${height}">${grid}${bars}</svg></div>`;
+}
+
+function setRotationStatsPeriod(mode) {
+  rotationStatsMode = mode;
+  renderRotationPerformance();
+  renderRotationCompliance();
+}
+
+function calculateRotationPerformance() {
+  const excludedRoles = new Set(['НУ', 'СО', 'ДС']);
+  const eligibleIndexes = (operators || []).map((name, index) => ({
+    name,
+    index,
+    id: operatorIds?.[index]
+  })).filter(item => item.name && !excludedRoles.has(operatorRoles?.[item.index]));
+  const eligibleNames = new Set(eligibleIndexes.map(item => item.name));
+  const total = new Set(eligibleIndexes.map(item => item.id || item.name)).size;
+  window.lastRotationPerformanceDiagnostics = {
+    excluded: {
+      НУ: (operatorRoles || []).filter(role => role === 'НУ').length,
+      СО: (operatorRoles || []).filter(role => role === 'СО').length,
+      ДС: (operatorRoles || []).filter(role => role === 'ДС').length
+    },
+    eligible: total
+  };
+  const currentKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+  const points = [];
+  const history = savedPlans?.rotationHistory || {};
+  Object.keys(history).sort().forEach(key => {
+    const plan = history[key];
+    if (rotationStatsMode === 'month' && (plan?.year !== rotationStatsYear || plan?.month !== rotationStatsMonth)) return;
+    if (rotationStatsMode === 'year' && plan?.year !== rotationStatsYear) return;
+    if (!plan || typeof isRotationApproved !== 'function' || !isRotationApproved(plan.year, plan.month)) return;
+    const historicalIds = Array.isArray(plan.operatorIds) ? plan.operatorIds : null;
+    const historicalRoles = Array.isArray(plan.operatorRoles) ? plan.operatorRoles : null;
+    const historicalEligible = historicalIds && historicalRoles
+      ? new Set(historicalIds.filter((id, index) => id && !new Set(['НУ', 'СО', 'ДС']).has(historicalRoles[index])))
+      : null;
+    const green = new Set();
+    (plan.rows || []).forEach((row, rowIndex) => {
+      (row || []).slice(1).forEach((operator, dayIndex) => {
+        const name = String(operator || '').trim();
+        if (!name || name === '+' || name.startsWith('ДС:') || !eligibleNames.has(name)) return;
+        const currentIndex = operators.indexOf(name);
+        const operatorId = historicalIds?.[currentIndex] || operatorIds?.[currentIndex];
+        if (historicalEligible && !historicalEligible.has(operatorId)) return;
+        if (typeof rotationFactState === 'function' && rotationFactState(name, (plan.posts || posts)[rowIndex], plan.year, plan.month, dayIndex + 1) === 'green') green.add(operatorId || name);
+      });
+    });
+    // Старые snapshots не содержат исторический состав участка. Не подменяем
+    // его текущим списком операторов: для таких месяцев знаменатель неизвестен.
+    const denominator = historicalEligible ? historicalEligible.size : (key === currentKey ? total : null);
+    const label = new Date(plan.year, plan.month, 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+    points.push({ key, label, count: green.size, operators: [...green], total: denominator, percent: denominator ? (green.size / denominator) * 100 : null });
+  });
+  if (rotationStatsMode === 'year' || rotationStatsMode === 'all') {
+    const approved = points.filter(point => point.percent !== null);
+    const unique = new Set();
+    approved.forEach(point => point.operators?.forEach(id => unique.add(id)));
+    const denominator = approved.length ? total : null;
+    return { total: denominator, points, uniqueCount: unique.size };
+  }
+  return { total, points, uniqueCount: points[0]?.count || 0 };
+}
+
+function renderRotationPerformance() {
+  const host = document.getElementById('rotationPerformanceBlock');
+  if (!host) return;
+  const yearSelect = document.getElementById('rotationStatsYear');
+  const monthSelect = document.getElementById('rotationStatsMonth');
+  if (yearSelect && !yearSelect.options.length) {
+    const years = [...new Set(Object.values(savedPlans?.rotationHistory || {}).map(plan => plan.year).filter(Boolean))].sort((a, b) => a - b);
+    if (!years.includes(rotationStatsYear)) years.push(rotationStatsYear);
+    yearSelect.innerHTML = years.map(year => `<option value="${year}">${year}</option>`).join('');
+  }
+  if (monthSelect && !monthSelect.options.length) monthSelect.innerHTML = Array.from({ length: 12 }, (_, month) => `<option value="${month}">${new Date(2000, month, 1).toLocaleDateString('ru-RU', { month: 'long' })}</option>`).join('');
+  if (yearSelect) yearSelect.value = String(rotationStatsYear);
+  if (yearSelect) yearSelect.hidden = rotationStatsMode === 'all';
+  if (monthSelect) monthSelect.value = String(rotationStatsMonth);
+  if (monthSelect) monthSelect.hidden = rotationStatsMode !== 'month';
+  const result = calculateRotationPerformance();
+  const current = [...result.points].reverse().find(point => point.percent !== null);
+  if (!current || !result.total) {
+    host.innerHTML = '<div class="stats-chart-empty">Нет данных для расчёта ротации.</div>';
+    return;
+  }
+  const displayCount = result.uniqueCount ?? current.count;
+  const width = Math.max(360, host.clientWidth || 640), height = 190, left = 42, right = 16, top = 14, bottom = 34;
+  const points = result.points.filter(point => point.percent !== null), chartWidth = width - left - right, chartHeight = height - top - bottom;
+  const x = i => points.length === 1 ? left + chartWidth / 2 : left + i * chartWidth / (points.length - 1);
+  const y = p => top + chartHeight - (p / 100) * chartHeight;
+  const barGap = 12;
+  const barWidth = points.length ? Math.max(18, (chartWidth - barGap * (points.length - 1)) / points.length) : 0;
+  const bars = points.map((point, index) => {
+    const value = Math.max(0, Math.min(100, point.percent));
+    const barHeight = (value / 100) * chartHeight;
+    const barX = left + index * (barWidth + barGap);
+    const barY = top + chartHeight - barHeight;
+    const label = `${point.percent.toLocaleString('ru-RU', { maximumFractionDigits: 1 })}%`;
+    const inside = barHeight >= 28;
+    const textY = inside ? barY + 18 : Math.max(top + 12, barY - 6);
+    const textColor = inside ? '#ffffff' : '#1e3a8a';
+    return `<g class="rotation-bar"><title>${point.label}\nРотировано: ${point.count} из ${point.total}\nПроцент: ${label}</title><rect x="${barX.toFixed(1)}" y="${barY.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${Math.max(0, barHeight).toFixed(1)}" rx="5" fill="#2563eb"/><text x="${(barX + barWidth / 2).toFixed(1)}" y="${textY.toFixed(1)}" text-anchor="middle" class="rotation-bar-value" fill="${textColor}">${label}</text><text x="${(barX + barWidth / 2).toFixed(1)}" y="${(top + chartHeight + 22).toFixed(1)}" text-anchor="middle" class="chart-axis-label">${point.label}</text></g>`;
+  }).join('');
+  const gridLines = [0, 25, 50, 75, 100].map(value => {
+    const gridY = y(value);
+    return `<line x1="${left}" y1="${gridY}" x2="${width - right}" y2="${gridY}" class="chart-grid-line"/><text x="${left - 8}" y="${gridY + 4}" class="chart-axis-label" text-anchor="end">${value}%</text>`;
+  }).join('');
+  host.innerHTML = `<div class="rotation-performance-summary">Ротировано: <b>${displayCount}</b> из <b>${current.total}</b> операторов. Процент ротации: <b>${((displayCount / current.total) * 100).toLocaleString('ru-RU',{minimumFractionDigits:1,maximumFractionDigits:1})}%</b>.</div><div class="rotation-bar-scroll"><svg class="stats-line-chart rotation-performance-chart rotation-bar-chart" viewBox="0 0 ${Math.max(width, left + points.length * (barWidth + barGap) + right)} ${height}" role="img" aria-label="Процент ротированных операторов по периодам">${gridLines}${bars}</svg></div>`;
+}
+
 function renderStatsDashboard() {
   const snapshot = calculateStatsSnapshot();
 
@@ -1344,4 +1497,5 @@ status.textContent = count > 0
   renderOperatorRatingChart();
   renderPostCoverageChart();
   renderAttendanceRatingChart();
+  renderRotationPerformance();
 }

@@ -814,6 +814,8 @@ function refreshRotationCalendar() {
   if (plan) restorePlan('rotation', 'rotCalendarTable', '#16a34a', plan);
   else showMissingRotationPlan(date.getFullYear(), date.getMonth());
   renderRotationApprovalControl();
+  if (typeof renderStatsDashboard === 'function') renderStatsDashboard();
+  if (typeof renderRotationCompliance === 'function') renderRotationCompliance();
 }
 
 let rotationFactRefreshTimer = null;

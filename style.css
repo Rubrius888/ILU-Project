@@ -2019,6 +2019,17 @@ body {
 .rotation-fact-red { background-color:#fee2e2 !important; color:#991b1b !important; }
 .rotation-fact-neutral { background-color:#f8fafc !important; }
 .rotation-fact-legend { margin:8px 0; color:#475569; font-size:12px; }
+.rotation-performance-panel { margin:16px 0; }
+.rotation-charts-row { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; align-items:start; }
+.rotation-performance-summary { margin-bottom:10px; color:#334155; font-size:15px; }
+.rotation-performance-controls { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+.rotation-performance-controls button,.rotation-performance-controls select { padding:7px 10px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#334155; }
+.rotation-performance-chart { width:100%; min-height:190px; }
+.rotation-bar-scroll { width:100%; overflow-x:auto; overflow-y:hidden; }
+.rotation-bar-chart { display:block; min-width:360px; }
+.rotation-bar-value { font-size:12px; font-weight:700; pointer-events:none; }
+.rotation-bar rect { transition:filter .15s ease; }
+.rotation-bar:hover rect { filter:brightness(1.12); }
 .rotation-comment-overlay { position:fixed; inset:0; z-index:10000; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(15,23,42,.62); }
 .rotation-comment-modal { width:min(540px,100%); max-height:min(680px,calc(100vh - 32px)); overflow:auto; box-sizing:border-box; padding:24px; border-radius:14px; background:#1f2937; color:#f8fafc; box-shadow:0 20px 60px rgba(0,0,0,.4); }
 .rotation-comment-modal h2 { margin:0 0 16px; font-size:22px; }
@@ -2031,3 +2042,4 @@ body {
 .rotation-comment-cancel { background:#475569; color:#f8fafc; }
 .rotation-comment-save { background:#2563eb; color:#fff; }
 @media (max-width:520px) { .rotation-comment-modal { padding:18px; } .rotation-comment-actions { flex-direction:column-reverse; } .rotation-comment-actions button { width:100%; } }
+@media (max-width:800px) { .rotation-charts-row { grid-template-columns:1fr; } }
