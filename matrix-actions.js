@@ -19,18 +19,37 @@ function hasStartedCriticalTraining(row, col) {
   );
 }
 
-function showProcessWarningDialog({ operator, post, details, onConfirm, onCancel }) {
+function recordPlacementFactEvent(row, col, eventType, sourcePlacementId = null) {
+  const operatorId = operatorIds[col];
+  const postId = postIds[row];
+  if (!operatorId || !postId) return;
+  if (!placementFactTrackingStartedAt) {
+    placementFactTrackingStartedAt = new Date().toISOString();
+  }
+  placementFactEvents.push({
+    id: `fact-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    operatorId,
+    postId,
+    eventType,
+    timestamp: new Date().toISOString(),
+    sourcePlacementId
+  });
+}
+
+function showProcessWarningDialog({ operator = '', post = '', details = '', title = '⚠ ВНИМАНИЕ! ⚠', subtitle = 'ИЗМЕНЕНИЕ ПРОИЗВОДСТВЕННОГО ПРОЦЕССА', confirmText = 'Оператор ознакомлен', cancelText = 'Отмена', onConfirm, onCancel }) {
   const overlay = document.createElement('div');
   overlay.className = 'process-warning-overlay';
   const modal = document.createElement('section');
   modal.className = 'process-warning-modal';
   modal.setAttribute('role', 'alertdialog');
   modal.setAttribute('aria-modal', 'true');
-  modal.innerHTML = `<div class="process-warning-title">⚠ ВНИМАНИЕ! ⚠</div>
-    <div class="process-warning-subtitle">ИЗМЕНЕНИЕ ПРОИЗВОДСТВЕННОГО ПРОЦЕССА</div>
-    <div class="process-warning-meta"><b>Оператор:</b> ${escapeHtml(operator)}<br><b>Пост:</b> ${escapeHtml(post)}</div>
-    <div class="process-warning-description"><b>С момента последнего ознакомления произошли изменения:</b><br>${escapeHtml(details).replace(/\n/g, '<br>')}</div>
-    <div class="process-warning-actions"><button type="button" class="process-warning-cancel">Отмена</button><button type="button" class="process-warning-confirm">Оператор ознакомлен</button></div>`;
+  const meta = operator || post
+    ? `<div class="process-warning-meta"><b>Оператор:</b> ${escapeHtml(operator)}<br><b>Пост:</b> ${escapeHtml(post)}</div>`
+    : '';
+  modal.innerHTML = `<div class="process-warning-title">${escapeHtml(title)}</div>
+    <div class="process-warning-subtitle">${escapeHtml(subtitle)}</div>${meta}
+    <div class="process-warning-description">${escapeHtml(details).replace(/\n/g, '<br>')}</div>
+    <div class="process-warning-actions"><button type="button" class="process-warning-cancel">${escapeHtml(cancelText)}</button><button type="button" class="process-warning-confirm">${escapeHtml(confirmText)}</button></div>`;
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
   const close = () => { overlay.remove(); document.removeEventListener('keydown', escape); };
@@ -96,6 +115,9 @@ function cyclePostStatus(row, col) {
     newVal => {
       // Снятие оператора с поста.
       if (newVal === '') {
+        if (isActivePlacement(attendanceData[row][col])) {
+          recordPlacementFactEvent(row, col, 'end');
+        }
         attendanceData[row][col] = '';
 
         const trainingRecordsChanged =
@@ -112,6 +134,8 @@ function cyclePostStatus(row, col) {
         }
 
         renderMatrix();
+        saveState();
+        if (typeof refreshRotationCalendar === 'function') refreshRotationCalendar();
         return;
       }
 
@@ -174,7 +198,10 @@ function cyclePostStatus(row, col) {
               : trainingRecords,
             placementLog: Array.isArray(placementLog)
               ? placementLog.slice()
-              : placementLog
+              : placementLog,
+            placementFactEvents: Array.isArray(placementFactEvents)
+              ? placementFactEvents.slice()
+              : placementFactEvents
           }
         : null;
 
@@ -200,6 +227,9 @@ function cyclePostStatus(row, col) {
         placementLog = Array.isArray(placementSnapshot.placementLog)
           ? placementSnapshot.placementLog.slice()
           : placementSnapshot.placementLog;
+        placementFactEvents = Array.isArray(placementSnapshot.placementFactEvents)
+          ? placementSnapshot.placementFactEvents.slice()
+          : placementSnapshot.placementFactEvents;
 
         if (typeof renderTrainingTable === 'function') {
           renderTrainingTable();
@@ -254,6 +284,7 @@ function cyclePostStatus(row, col) {
             ) {
               const oldPost = posts[otherRow];
 
+              recordPlacementFactEvent(otherRow, col, 'end');
               attendanceData[otherRow][col] = '';
 
               placementLog = placementLog.filter(entry =>
@@ -283,7 +314,8 @@ function cyclePostStatus(row, col) {
           posts[row],
           '',
           {
-            onConfirm: () => {
+            onConfirm: entry => {
+              recordPlacementFactEvent(row, col, 'start', entry?.id || null);
               const operatorId = operatorIds[col];
               const acknowledgedAt = new Date().toISOString();
               pendingProcessAcknowledgements.forEach(change => {
@@ -306,6 +338,7 @@ function cyclePostStatus(row, col) {
 
               renderMatrix();
               saveState();
+              if (typeof refreshRotationCalendar === 'function') refreshRotationCalendar();
             },
             onCancel: restoreCirclePlacement
           }

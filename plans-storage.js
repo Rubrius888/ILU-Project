@@ -33,6 +33,132 @@ function getRotationSnapshot(year, month) {
   return savedPlans.rotationHistory?.[planMonthKey(year, month)] || null;
 }
 
+function getRotationApproval(year, month) {
+  return rotationApprovals?.[planMonthKey(year, month)] || null;
+}
+
+function isRotationApproved(year, month) {
+  return getRotationApproval(year, month)?.status === 'approved';
+}
+
+function approveCurrentRotationPlan() {
+  const date = getRotationViewDate();
+  const key = planMonthKey(date.getFullYear(), date.getMonth());
+  if (!getRotationSnapshot(date.getFullYear(), date.getMonth())) {
+    alert('Сначала сформируйте план ротации.');
+    return;
+  }
+  if (isRotationApproved(date.getFullYear(), date.getMonth())) return;
+  showProcessWarningDialog({
+    title: '⚠ ВНИМАНИЕ! ⚠',
+    subtitle: 'УТВЕРЖДЕНИЕ ПЛАНА РОТАЦИИ',
+    details: 'После утверждения плана:\n' +
+      '• Изменение назначений будет запрещено.\n' +
+      '• Перегенерация плана будет заблокирована.\n' +
+      '• Доступными останутся комментарии к запланированным ячейкам.\n\n' +
+      'Вы действительно хотите утвердить план?',
+    cancelText: 'Отмена',
+    confirmText: 'Утвердить план',
+    onConfirm: () => {
+      rotationApprovals[key] = { status: 'approved', approvedAt: new Date().toISOString() };
+      saveState();
+      updateRotationMonthLabel();
+      refreshRotationCalendar();
+    }
+  });
+}
+
+function renderRotationApprovalControl() {
+  const host = document.getElementById('rotationApprovalControl');
+  if (!host) return;
+  const date = getRotationViewDate();
+  host.innerHTML = isRotationApproved(date.getFullYear(), date.getMonth())
+    ? '<span class="rotation-approved-badge">✓ План утверждён</span>'
+    : '<button class="btn-small" type="button" onclick="approveCurrentRotationPlan()">Утвердить план</button>';
+}
+
+function editRotationCellComment(cell) {
+  const date = getRotationViewDate();
+  const day = Number(cell.getAttribute('data-day')) + 1;
+  const key = planMonthKey(date.getFullYear(), date.getMonth());
+  const operatorId = operatorIds[operators.indexOf(cell.getAttribute('data-op'))];
+  const postId = postIds[Number(cell.getAttribute('data-post'))];
+  const isoDate = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  const comments = rotationComments[key] ||= [];
+  const existing = comments.find(item => item.operatorId === operatorId && item.postId === postId && item.date === isoDate);
+  const oldOverlay = document.querySelector('.rotation-comment-overlay');
+  if (oldOverlay) oldOverlay.remove();
+  const overlay = document.createElement('div');
+  overlay.className = 'rotation-comment-overlay';
+  overlay.innerHTML = `<section class="rotation-comment-modal" role="dialog" aria-modal="true" aria-labelledby="rotationCommentTitle">
+    <h2 id="rotationCommentTitle">Комментарий к ротации</h2>
+    <div class="rotation-comment-context"><b>Оператор:</b> ${escapeHtml(cell.getAttribute('data-op') || '')}<br><b>Пост:</b> ${escapeHtml(posts[Number(cell.getAttribute('data-post'))] || '')}<br><b>Дата:</b> ${escapeHtml(isoDate.split('-').reverse().join('.'))}</div>
+    <label for="rotationCommentText">Комментарий НУ</label>
+    <textarea id="rotationCommentText" placeholder="Укажите причину отклонения или дополнительную информацию…">${escapeHtml(existing?.text || '')}</textarea>
+    <div class="rotation-comment-actions"><button type="button" class="rotation-comment-cancel">Отмена</button><button type="button" class="rotation-comment-save">Сохранить комментарий</button></div>
+  </section>`;
+  document.body.appendChild(overlay);
+  const textarea = overlay.querySelector('#rotationCommentText');
+  const close = () => { document.removeEventListener('keydown', onKey); overlay.remove(); };
+  const onKey = event => { if (event.key === 'Escape') close(); };
+  overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
+  overlay.querySelector('.rotation-comment-cancel').onclick = close;
+  overlay.querySelector('.rotation-comment-save').onclick = () => {
+    const text = textarea.value;
+    if (!text.trim()) rotationComments[key] = comments.filter(item => item !== existing);
+    else if (existing) { existing.text = text.trim(); existing.updatedAt = new Date().toISOString(); }
+    else comments.push({ id: `rotation-comment-${Date.now()}-${Math.random().toString(36).slice(2,8)}`, operatorId, postId, date: isoDate, text: text.trim(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    saveState();
+    close();
+    refreshRotationCalendar();
+  };
+  document.addEventListener('keydown', onKey);
+  requestAnimationFrame(() => { textarea.focus(); textarea.setSelectionRange(textarea.value.length, textarea.value.length); });
+}
+
+function rotationFactState(operatorName, postName, year, month, day) {
+  const operatorId = operatorIds[operators.indexOf(operatorName)];
+  const postId = postIds[posts.indexOf(postName)];
+  if (!operatorId || !postId || !Array.isArray(placementFactEvents)) return 'neutral';
+  const startOfDay = new Date(year, month, day, 0, 0, 0, 0).getTime();
+  const endOfDay = new Date(year, month, day + 1, 0, 0, 0, 0).getTime();
+  const now = Date.now();
+  const events = placementFactEvents
+    .filter(event => event.operatorId === operatorId && event.postId === postId)
+    .map(event => ({ ...event, time: Date.parse(event.timestamp) }))
+    .filter(event => Number.isFinite(event.time))
+    .sort((a, b) => a.time - b.time);
+  // Events are paired chronologically. Keep all currently open starts so
+  // repeated confirmed intervals in one production day are not lost.
+  const openStarts = [];
+  for (const event of events) {
+    if (event.eventType === 'start') {
+      openStarts.push(event.time);
+    } else if (event.eventType === 'end' && openStarts.length) {
+      // A normal placement closes the most recent open interval. Older open
+      // intervals are retained for compatibility with legacy/incomplete logs.
+      const openStart = openStarts.pop();
+      if (Math.max(openStart, startOfDay) < Math.min(event.time, endOfDay)) {
+        return 'green';
+      }
+    }
+  }
+  const currentTime = now;
+  if (openStarts.some(openStart =>
+    Math.max(openStart, startOfDay) < Math.min(currentTime, endOfDay)
+  )) return 'green';
+  // Красный допустим только после завершения локального календарного дня и
+  // если приложение вело непрерывный учёт с его начала. Старые snapshots и
+  // импортированные базы без отметки начала учёта остаются нейтральными.
+  // Красный означает отсутствие подтверждения в журнале после завершения
+  // календарной даты. Это не утверждение о физическом отсутствии оператора;
+  // сведения о полноте учёта сохраняются отдельно только для диагностики.
+  if (now >= endOfDay) {
+    return 'red';
+  }
+  return 'neutral';
+}
+
 function getRotationSettings() {
   const settings = savedPlans.rotationSettings || {};
   return {
@@ -340,7 +466,6 @@ function capturePlan(type, tableId, preserveHistory = false) {
     const month = viewDate.getMonth();
     const key = planMonthKey(year, month);
     const previous = getRotationSnapshot(year, month);
-    validateNoActiveRotationChain(previous, year, month);
     if (preserveHistory) {
       rows = mergeCurrentMonthHistory(type, previous, rows, year, month);
       const protectedChains = window.rotationProtectedContext?.year === year &&
@@ -572,6 +697,10 @@ function restorePlan(type, tableId, color, explicitPlan = null) {
           cell.dataset.chainId = String(chainId);
           cell.title = `Цепочка ${chainId}`;
         }
+        if (type === 'rotation' && isRotationApproved(plan.year, plan.month)) {
+          const factState = rotationFactState(operator, (plan.posts || posts)[rowIndex], plan.year, plan.month, columnIndex);
+          cell.classList.add(`rotation-fact-${factState}`);
+        }
       } else {
         cell.textContent = '+';
         cell.style.color = '#94a3b8';
@@ -678,12 +807,40 @@ function updateRotationMonthLabel() {
   }
 }
 
+// Обновляет только открытый календарь ротации после изменения состояния.
+function refreshRotationCalendar() {
+  const date = getRotationViewDate();
+  const plan = getRotationSnapshot(date.getFullYear(), date.getMonth());
+  if (plan) restorePlan('rotation', 'rotCalendarTable', '#16a34a', plan);
+  else showMissingRotationPlan(date.getFullYear(), date.getMonth());
+  renderRotationApprovalControl();
+}
+
+let rotationFactRefreshTimer = null;
+function scheduleRotationFactRefresh() {
+  if (rotationFactRefreshTimer) clearTimeout(rotationFactRefreshTimer);
+  const now = new Date();
+  const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1, 0);
+  rotationFactRefreshTimer = setTimeout(() => {
+    const completed = new Date();
+    completed.setDate(completed.getDate() - 1);
+    const key = `${completed.getFullYear()}-${String(completed.getMonth() + 1).padStart(2, '0')}-${String(completed.getDate()).padStart(2, '0')}`;
+    if (!placementFactCompleteDates.includes(key)) {
+      placementFactCompleteDates.push(key);
+      saveState();
+    }
+    refreshRotationCalendar();
+    scheduleRotationFactRefresh();
+  }, Math.max(1000, nextDay.getTime() - now.getTime()));
+}
+
 function setRotationPlanMonth(year, month) {
   window.rotationPlanViewDate = new Date(year, month, 1);
   updateRotationMonthLabel();
   const plan = getRotationSnapshot(year, month);
   if (plan) restorePlan('rotation', 'rotCalendarTable', '#16a34a', plan);
   else showMissingRotationPlan(year, month);
+  renderRotationApprovalControl();
 }
 
 function changeRotationMonth(delta) {
@@ -1559,6 +1716,13 @@ function wrapPlanGenerator(type, functionName, tableId, color) {
   const originalFunction = window[functionName];
   if (typeof originalFunction !== 'function') return;
   window[functionName] = function () {
+    if (type === 'rotation') {
+      const date = getRotationViewDate();
+      if (isRotationApproved(date.getFullYear(), date.getMonth())) {
+        alert('План ротации утверждён и недоступен для изменения.');
+        return false;
+      }
+    }
     const table = document.getElementById(tableId);
     const tableBackup = table ? {
       head: table.tHead?.innerHTML || '',
@@ -1570,11 +1734,9 @@ function wrapPlanGenerator(type, functionName, tableId, color) {
         const viewDate = type === 'rotation' ? getRotationViewDate() : getDevelopmentViewDate();
         if (type === 'rotation') {
           const previous = getRotationSnapshot(viewDate.getFullYear(), viewDate.getMonth());
-          const protectedChains = getProtectedRotationChains(
-            previous,
-            viewDate.getFullYear(),
-            viewDate.getMonth()
-          );
+          const protectedChains = isRotationApproved(viewDate.getFullYear(), viewDate.getMonth())
+            ? getProtectedRotationChains(previous, viewDate.getFullYear(), viewDate.getMonth())
+            : [];
           window.rotationProtectedContext = {
             year: viewDate.getFullYear(),
             month: viewDate.getMonth(),
@@ -1622,6 +1784,13 @@ function wrapPlanChange(type, functionName, tableId, color) {
   const originalFunction = window[functionName];
   if (typeof originalFunction !== 'function') return;
   window[functionName] = function () {
+    if (type === 'rotation') {
+      const date = getRotationViewDate();
+      if (isRotationApproved(date.getFullYear(), date.getMonth())) {
+        alert('План ротации утверждён и недоступен для изменения.');
+        return false;
+      }
+    }
     if (type === 'rotation') window.lastRotationGenerationMeta = null;
     const result = originalFunction.apply(this, arguments);
     capturePlan(type, tableId, false);
@@ -1655,7 +1824,9 @@ setTimeout(() => {
   updateRotationMonthLabel();
   restorePlan('development', 'devCalendarTable', '#2563eb');
   restorePlan('rotation', 'rotCalendarTable', '#16a34a');
+  renderRotationApprovalControl();
   applyAutomaticRotation();
+  scheduleRotationFactRefresh();
   showMonthlyPlanningReminder();
 }, 0);
 
@@ -1664,7 +1835,11 @@ setTimeout(() => {
 setInterval(applyAutomaticRotation, 60 * 1000);
 window.addEventListener('focus', applyAutomaticRotation);
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) applyAutomaticRotation();
+  if (!document.hidden) {
+    applyAutomaticRotation();
+    refreshRotationCalendar();
+    scheduleRotationFactRefresh();
+  }
 });
 
 // Общая подсказка календарей: только пост и календарная дата.

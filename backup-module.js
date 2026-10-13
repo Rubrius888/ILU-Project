@@ -78,6 +78,22 @@ function validateApplicationState(state) {
         (change.acknowledgements !== undefined && !Array.isArray(change.acknowledgements))))) {
     throw new Error('Некорректная история изменений процессов');
   }
+  for (const [name, value] of [['rotationApprovals', state.rotationApprovals], ['rotationComments', state.rotationComments]]) {
+    if (value !== undefined && (!value || typeof value !== 'object' || Array.isArray(value))) {
+      throw new Error(`Некорректная структура ${name}`);
+    }
+  }
+  if (state.placementFactEvents !== undefined && !Array.isArray(state.placementFactEvents)) {
+    throw new Error('Некорректная история фактических событий');
+  }
+  if (state.placementFactTrackingStartedAt !== undefined &&
+      state.placementFactTrackingStartedAt !== null &&
+      typeof state.placementFactTrackingStartedAt !== 'string') {
+    errors.push('placementFactTrackingStartedAt должен быть строкой или null');
+  }
+  if (state.placementFactCompleteDates !== undefined && !Array.isArray(state.placementFactCompleteDates)) {
+    errors.push('placementFactCompleteDates должен быть массивом');
+  }
 
   if (
     state.difficulty.length !== postCount ||

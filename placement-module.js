@@ -133,6 +133,8 @@ function logPlacement(opName, postName, reason = '', lifecycle = {}) {
     time,
     opName,
     postName,
+    operatorId: operatorIds[operators.indexOf(opName)] || null,
+    postId: postIds[posts.indexOf(postName)] || null,
     reason,
     reasonText: '',
     comment: ''

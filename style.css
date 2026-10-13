@@ -2014,3 +2014,20 @@ body {
 .process-warning-actions button { padding:10px 16px; border:0; border-radius:7px; cursor:pointer; font-weight:700; }
 .process-warning-cancel { background:#e5e7eb; color:#111827; }
 .process-warning-confirm { background:#facc15; color:#422006; }
+.rotation-approved-badge { display:inline-block; padding:8px 10px; border-radius:6px; background:#dcfce7; color:#166534; font-weight:700; }
+.rotation-fact-green { background-color:#dcfce7 !important; color:#166534 !important; }
+.rotation-fact-red { background-color:#fee2e2 !important; color:#991b1b !important; }
+.rotation-fact-neutral { background-color:#f8fafc !important; }
+.rotation-fact-legend { margin:8px 0; color:#475569; font-size:12px; }
+.rotation-comment-overlay { position:fixed; inset:0; z-index:10000; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(15,23,42,.62); }
+.rotation-comment-modal { width:min(540px,100%); max-height:min(680px,calc(100vh - 32px)); overflow:auto; box-sizing:border-box; padding:24px; border-radius:14px; background:#1f2937; color:#f8fafc; box-shadow:0 20px 60px rgba(0,0,0,.4); }
+.rotation-comment-modal h2 { margin:0 0 16px; font-size:22px; }
+.rotation-comment-context { margin-bottom:16px; padding:12px; border-radius:8px; background:#111827; color:#cbd5e1; line-height:1.55; }
+.rotation-comment-modal label { display:block; margin-bottom:6px; font-weight:600; }
+.rotation-comment-modal textarea { display:block; width:100%; min-height:116px; box-sizing:border-box; resize:vertical; padding:10px 12px; border:1px solid #64748b; border-radius:8px; background:#111827; color:#f8fafc; font:inherit; line-height:1.45; }
+.rotation-comment-modal textarea:focus { outline:none; border-color:#60a5fa; box-shadow:0 0 0 3px rgba(96,165,250,.22); }
+.rotation-comment-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
+.rotation-comment-actions button { border:0; border-radius:7px; padding:10px 16px; cursor:pointer; font:inherit; }
+.rotation-comment-cancel { background:#475569; color:#f8fafc; }
+.rotation-comment-save { background:#2563eb; color:#fff; }
+@media (max-width:520px) { .rotation-comment-modal { padding:18px; } .rotation-comment-actions { flex-direction:column-reverse; } .rotation-comment-actions button { width:100%; } }

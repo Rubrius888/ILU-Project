@@ -1664,9 +1664,12 @@ function generateRotationPlan() {
     for (let d = 0; d < daysInMonth; d++) {
       const cell = schedule[d][r];
       const op = cell?.operator || '';
+      const executionClass = op && typeof isRotationApproved === 'function' && isRotationApproved(year, month)
+        ? ` rotation-fact-${rotationFactState(op, posts[r], year, month, d + 1)}`
+        : '';
       const reserveAttrs = cell?.reserve ? ' data-reserve="true"' : '';
       const reserveStyle = cell?.reserve ? 'color:#7c3aed;font-weight:600;' : '';
-      bodyHTML += `<td${reserveAttrs} style="font-size:11px;${reserveStyle}">${op}</td>`;
+      bodyHTML += `<td class="${executionClass.trim()}"${reserveAttrs} style="font-size:11px;${reserveStyle}">${op}</td>`;
     }
     bodyHTML += '</tr>';
   }
@@ -1787,6 +1790,11 @@ function editRotationCell(event) {
   hideMenu();
 
   const td = event.target;
+  const viewDate = getRotationViewDate();
+  if (typeof isRotationApproved === 'function' && isRotationApproved(viewDate.getFullYear(), viewDate.getMonth())) {
+    if (typeof editRotationCellComment === 'function') editRotationCellComment(td);
+    return;
+  }
   const opName = td.getAttribute('data-op');
   if (!opName) return;
 

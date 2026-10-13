@@ -16,6 +16,10 @@ if (!restoredState && !storedStateExists) {
   operators = [];
   operatorIds = [];
   validatedCarModels = {};
+  processChanges = [];
+  rotationApprovals = {};
+  rotationComments = {};
+  placementFactEvents = [];
   difficulty = [];
   ergonomics = [];
   trainingDays = [];
@@ -39,6 +43,8 @@ if (!restoredState && !storedStateExists) {
   workshopChief = '';
   sectionChief = '';
 }
+
+initializePlacementFactTracking();
 
 if (!restoredState && storedStateExists && storageLoadError) {
   setTimeout(() => {

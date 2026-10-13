@@ -19,6 +19,11 @@ function saveState() {
     operatorIds,
     validatedCarModels,
     processChanges,
+    rotationApprovals,
+    rotationComments,
+    placementFactEvents,
+    placementFactTrackingStartedAt,
+    placementFactCompleteDates,
     difficulty,
     ergonomics,
     trainingDays,
@@ -144,6 +149,17 @@ function loadState() {
     processChanges = Array.isArray(state.processChanges)
       ? state.processChanges
       : [];
+    rotationApprovals = state.rotationApprovals && typeof state.rotationApprovals === 'object' && !Array.isArray(state.rotationApprovals)
+      ? state.rotationApprovals : {};
+    rotationComments = state.rotationComments && typeof state.rotationComments === 'object' && !Array.isArray(state.rotationComments)
+      ? state.rotationComments : {};
+    placementFactEvents = Array.isArray(state.placementFactEvents)
+      ? state.placementFactEvents : [];
+    placementFactTrackingStartedAt = typeof state.placementFactTrackingStartedAt === 'string'
+      ? state.placementFactTrackingStartedAt : null;
+    placementFactCompleteDates = Array.isArray(state.placementFactCompleteDates)
+      ? [...new Set(state.placementFactCompleteDates.filter(value => typeof value === 'string'))]
+      : [];
     difficulty = state.difficulty;
     ergonomics = state.ergonomics;
     trainingDays = state.trainingDays;
@@ -242,4 +258,13 @@ function loadState() {
 
     return false;
   }
+}
+
+// Начинаем достоверный учёт только с фактического запуска текущей версии.
+// Для старых JSON это не восстанавливает историю задним числом.
+function initializePlacementFactTracking() {
+  if (placementFactTrackingStartedAt) return false;
+  placementFactTrackingStartedAt = new Date().toISOString();
+  if (typeof saveState === 'function') saveState();
+  return true;
 }
