@@ -313,6 +313,7 @@ let operators = [
 ];
 let operatorIds = operators.map(() => createStableId('operator'));
 let validatedCarModels = {};
+let processChanges = [];
 
 // Сложность каждого поста: A (красный), B (жёлтый), C (зелёный). По умолчанию C.
 let difficulty = [

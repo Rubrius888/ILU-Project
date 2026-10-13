@@ -76,6 +76,10 @@
     <button class="tab" onclick="openTab(event, 'placementLog')">
       Журнал расстановки
     </button>
+
+    <button class="tab" onclick="openTab(event, 'processChanges')">
+      Изменения процессов
+    </button>
   </div>
 
   <div class="info-cards-toolbar">
@@ -685,58 +689,57 @@
   </div>
 
   <div id="training" class="tab-content">
-  <div class="section-toolbar">
-    <div class="add-buttons-top">
-      <button class="btn-small" onclick="addTrainingRecord()">
-        + Добавить запись
+    <div class="section-toolbar">
+      <div class="add-buttons-top">
+        <button class="btn-small" onclick="addTrainingRecord()">
+          + Добавить запись
+        </button>
+      </div>
+
+      <button
+        class="btn-small print-button"
+        type="button"
+        onclick="printSections(['training'])"
+        title="Печать журнала обучения"
+      >
+        🖨 Печать
       </button>
     </div>
 
-    <button
-      class="btn-small print-button"
-      type="button"
-      onclick="printSections(['training'])"
-      title="Печать журнала обучения"
-    >
-      🖨 Печать
-    </button>
-  </div>
+    <div class="matrix-container" style="overflow-x:auto;">
+      <table id="trainingTable">
+        <thead>
+          <tr>
+            <th>Год</th>
+            <th>Месяц</th>
+            <th>Неделя начала</th>
+            <th>Неделя окончания</th>
+            <th>Пост</th>
+            <th>Оператор</th>
+            <th>Уровень</th>
+            <th>Статус</th>
+            <th>Автомобиль</th>
+            <th>Форматор</th>
+            <th>Дата начала обучения</th>
+            <th>Дата валидации</th>
+            <th>Срок обучения</th>
+            <th>Комментарий</th>
+            <th></th>
+          </tr>
+        </thead>
 
-  <div class="matrix-container" style="overflow-x:auto;">
-    <table id="trainingTable">
-      <thead>
-        <tr>
-          <th>Год</th>
-          <th>Месяц</th>
-          <th>Неделя начала</th>
-          <th>Неделя окончания</th>
-          <th>Пост</th>
-          <th>Оператор</th>
-          <th>Уровень</th>
-          <th>Статус</th>
-          <th>Автомобиль</th>
-          <th>Форматор</th>
-          <th>Дата начала обучения</th>
-          <th>Дата валидации</th>
-          <th>Срок обучения</th>
-          <th>Комментарий</th>
-          <th></th>
-        </tr>
-      </thead>
-
-      <tbody>
-        <tr>
-          <td
-            colspan="15"
-            style="text-align:center;color:#94a3b8;padding:40px;"
-          >
-            Нет записей. Нажмите «+ Добавить запись»
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</div>
+        <tbody>
+          <tr>
+            <td
+              colspan="15"
+              style="text-align:center;color:#94a3b8;padding:40px;"
+            >
+              Нет записей. Нажмите «+ Добавить запись»
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <div id="rotation" class="tab-content">
@@ -888,6 +891,13 @@
       </table>
     </div>
   </div>
+
+<div id="processChanges" class="tab-content">
+  <div class="section-toolbar">
+    <h1>Изменения процессов</h1>
+  </div>
+  <div id="processChangesList" class="process-changes-list"></div>
+</div>
 
 <div id="placementLog" class="tab-content">
   <div class="section-toolbar placement-log-toolbar">

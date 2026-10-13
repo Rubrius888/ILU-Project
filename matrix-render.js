@@ -17,9 +17,62 @@ function getMatrixValidatedCarModels(row, column) {
   return ['А1', 'М3'].filter(model => Array.isArray(saved) && saved.includes(model));
 }
 
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+}
+function formatProcessChangeDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value || '') : date.toLocaleDateString('ru-RU');
+}
+function openProcessChangeDialog(row) {
+  const text = prompt(`Изменение на посту «${posts[row]}»:`, '');
+  if (!text || !text.trim()) return;
+  processChanges.push({
+    id: `process-change-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    postId: postIds[row],
+    createdAt: new Date().toISOString(),
+    text: text.trim(),
+    acknowledgements: []
+  });
+  saveState();
+  renderMatrix();
+  renderProcessChangesTab();
+}
+
+function deleteProcessChange(changeId) {
+  const change = processChanges.find(item => item.id === changeId);
+  if (!change) return;
+  const post = posts[postIds.indexOf(change.postId)] || 'неизвестный пост';
+  if (!confirm(`Удалить изменение процесса для поста ${post}?`)) return;
+  processChanges = processChanges.filter(item => item.id !== changeId);
+  saveState();
+  renderProcessChangesTab();
+  renderMatrix();
+}
+
+function renderProcessChangesTab() {
+  const container = document.getElementById('processChangesList');
+  if (!container) return;
+  container.innerHTML = posts.map((post, row) => {
+    const postId = postIds[row];
+    const changes = processChanges.filter(change => change.postId === postId);
+    return `<section class="process-change-post"><h3>${escapeHtml(post)}</h3>
+      <button class="btn-small" type="button" data-process-add="${row}">+ Добавить изменение</button>
+      <div>${changes.length ? changes.map(change => `<div class="process-change-item"><b>${formatProcessChangeDate(change.createdAt)}</b> — ${escapeHtml(change.text)} <button class="btn-small" type="button" data-process-delete="${escapeHtml(change.id)}" title="Удалить">🗑</button></div>`).join('') : '<span style="color:#94a3b8;">Изменений нет</span>'}</div>
+    </section>`;
+  }).join('');
+  container.querySelectorAll('[data-process-add]').forEach(button => {
+    button.onclick = () => openProcessChangeDialog(Number(button.dataset.processAdd));
+  });
+  container.querySelectorAll('[data-process-delete]').forEach(button => {
+    button.onclick = () => deleteProcessChange(button.dataset.processDelete);
+  });
+}
+
 function renderMatrix() {
   const thead = document.querySelector('#iluTable thead');
   const tbody = document.querySelector('#iluTable tbody');
+  renderProcessChangesTab();
   const existingTable = document.getElementById('iluTable');
   if (existingTable?.__hideMatrixTooltip) {
     existingTable.__hideMatrixTooltip();

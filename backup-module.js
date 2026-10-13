@@ -70,6 +70,14 @@ function validateApplicationState(state) {
       (!state.validatedCarModels || typeof state.validatedCarModels !== 'object' || Array.isArray(state.validatedCarModels))) {
     throw new Error('Некорректная валидация моделей автомобилей');
   }
+  if (state.processChanges !== undefined &&
+      (!Array.isArray(state.processChanges) || state.processChanges.some(change =>
+        !change || typeof change !== 'object' || typeof change.id !== 'string' ||
+        typeof change.postId !== 'string' || typeof change.createdAt !== 'string' ||
+        typeof change.text !== 'string' ||
+        (change.acknowledgements !== undefined && !Array.isArray(change.acknowledgements))))) {
+    throw new Error('Некорректная история изменений процессов');
+  }
 
   if (
     state.difficulty.length !== postCount ||

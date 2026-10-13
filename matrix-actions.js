@@ -19,6 +19,28 @@ function hasStartedCriticalTraining(row, col) {
   );
 }
 
+function showProcessWarningDialog({ operator, post, details, onConfirm, onCancel }) {
+  const overlay = document.createElement('div');
+  overlay.className = 'process-warning-overlay';
+  const modal = document.createElement('section');
+  modal.className = 'process-warning-modal';
+  modal.setAttribute('role', 'alertdialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.innerHTML = `<div class="process-warning-title">⚠ ВНИМАНИЕ! ⚠</div>
+    <div class="process-warning-subtitle">ИЗМЕНЕНИЕ ПРОИЗВОДСТВЕННОГО ПРОЦЕССА</div>
+    <div class="process-warning-meta"><b>Оператор:</b> ${escapeHtml(operator)}<br><b>Пост:</b> ${escapeHtml(post)}</div>
+    <div class="process-warning-description"><b>С момента последнего ознакомления произошли изменения:</b><br>${escapeHtml(details).replace(/\n/g, '<br>')}</div>
+    <div class="process-warning-actions"><button type="button" class="process-warning-cancel">Отмена</button><button type="button" class="process-warning-confirm">Оператор ознакомлен</button></div>`;
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  const close = () => { overlay.remove(); document.removeEventListener('keydown', escape); };
+  const escape = event => { if (event.key === 'Escape') { close(); onCancel?.(); } };
+  modal.querySelector('.process-warning-cancel').onclick = () => { close(); onCancel?.(); };
+  modal.querySelector('.process-warning-confirm').onclick = () => { close(); onConfirm?.(); };
+  document.addEventListener('keydown', escape);
+  modal.querySelector('.process-warning-confirm').focus();
+}
+
 // Изменение статуса оператора на конкретном посту (○ стоит, △ обучается, пусто)
 function cyclePostStatus(row, col) {
   const td = document.querySelector(
@@ -110,6 +132,30 @@ function cyclePostStatus(row, col) {
       }
 
       const isCirclePlacement = newVal === '○';
+      const pendingProcessAcknowledgements = [];
+      if (isCirclePlacement) {
+        const operatorId = operatorIds[col];
+        const postId = postIds[row];
+        const pending = processChanges.filter(change =>
+          change.postId === postId &&
+          !(change.acknowledgements || []).some(item => item.operatorId === operatorId)
+        );
+        if (pending.length) {
+          const details = pending.map(change =>
+            `${formatProcessChangeDate(change.createdAt)} — ${change.text}`
+          ).join('\n');
+          pendingProcessAcknowledgements.push(...pending);
+          showProcessWarningDialog({
+            operator: operators[col],
+            post: posts[row],
+            details,
+            onCancel: () => pendingProcessAcknowledgements.splice(0),
+            onConfirm: () => continuePlacement()
+          });
+          return;
+        }
+      }
+      const continuePlacement = () => {
       const shouldPromoteIToLcr =
         isCirclePlacement && data[row][col] === 'I';
       const placementSnapshot = isCirclePlacement
@@ -238,6 +284,14 @@ function cyclePostStatus(row, col) {
           '',
           {
             onConfirm: () => {
+              const operatorId = operatorIds[col];
+              const acknowledgedAt = new Date().toISOString();
+              pendingProcessAcknowledgements.forEach(change => {
+                change.acknowledgements ||= [];
+                if (!change.acknowledgements.some(item => item.operatorId === operatorId)) {
+                  change.acknowledgements.push({ operatorId, acknowledgedAt });
+                }
+              });
               // I при подтверждённой постановке становится Lкр.
               if (shouldPromoteIToLcr) {
                 data[row][col] = 'Lкр';
@@ -251,6 +305,7 @@ function cyclePostStatus(row, col) {
               }
 
               renderMatrix();
+              saveState();
             },
             onCancel: restoreCirclePlacement
           }
@@ -263,6 +318,8 @@ function cyclePostStatus(row, col) {
       if (newVal === '△') {
         openAutomaticTrainingForm(row, col);
       }
+      };
+      continuePlacement();
     }
   );
 }

@@ -2000,3 +2000,17 @@ body {
   white-space: pre-line;
   pointer-events: none;
 }
+ .process-changes-list { display:flex; flex-direction:column; gap:14px; }
+.process-change-post { padding:16px; border:1px solid #cbd5e1; border-radius:10px; background:#fff; }
+.process-change-post h3 { margin:0 0 10px; color:#334155; }
+.process-change-item { display:flex; align-items:center; gap:8px; margin-top:10px; padding:8px; background:#f8fafc; border-radius:6px; }
+.process-warning-overlay { position:fixed; inset:0; z-index:30000; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(2,6,23,.68); }
+.process-warning-modal { width:min(560px, calc(100vw - 32px)); max-height:calc(100vh - 32px); overflow:auto; box-sizing:border-box; padding:26px; border:2px solid #facc15; border-radius:14px; background:#17202b; color:#f8fafc; box-shadow:0 24px 80px rgba(0,0,0,.45); }
+.process-warning-title { text-align:center; color:#facc15; font-size:25px; font-weight:800; letter-spacing:.04em; }
+.process-warning-subtitle { margin:8px 0 20px; text-align:center; color:#fde68a; font-size:14px; font-weight:700; }
+.process-warning-meta { padding:12px 14px; border-left:4px solid #facc15; background:#243244; line-height:1.7; }
+.process-warning-description { margin-top:14px; padding:14px; border-radius:8px; background:#3b3020; color:#fef3c7; line-height:1.55; }
+.process-warning-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:22px; flex-wrap:wrap; }
+.process-warning-actions button { padding:10px 16px; border:0; border-radius:7px; cursor:pointer; font-weight:700; }
+.process-warning-cancel { background:#e5e7eb; color:#111827; }
+.process-warning-confirm { background:#facc15; color:#422006; }

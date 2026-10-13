@@ -18,6 +18,7 @@ function saveState() {
     operators,
     operatorIds,
     validatedCarModels,
+    processChanges,
     difficulty,
     ergonomics,
     trainingDays,
@@ -140,6 +141,9 @@ function loadState() {
       !Array.isArray(state.validatedCarModels)
       ? state.validatedCarModels
       : {};
+    processChanges = Array.isArray(state.processChanges)
+      ? state.processChanges
+      : [];
     difficulty = state.difficulty;
     ergonomics = state.ergonomics;
     trainingDays = state.trainingDays;
