@@ -8,11 +8,8 @@ function getMatrixValidatedCarModels(row, column) {
   if (!['L', 'U', 'I'].includes(data[row]?.[column])) return [];
   const operatorId = operatorIds[column];
   const postId = postIds[row];
-  const hasRecord = trainingRecords.some(record =>
-    (record.operatorId ? record.operatorId === operatorId : record.op === operators[column]) &&
-    (record.postId ? record.postId === postId : record.post === posts[row])
-  );
-  if (!hasRecord) return ['А1', 'М3'];
+  // Валидация определяется только явным выбором пользователя. Отсутствие
+  // записи обучения не означает автоматическое подтверждение обеих версий.
   const saved = validatedCarModels[`${operatorId}|${postId}`];
   return ['А1', 'М3'].filter(model => Array.isArray(saved) && saved.includes(model));
 }

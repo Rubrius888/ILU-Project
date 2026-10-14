@@ -1315,6 +1315,7 @@ function renderTrainingTable() {
   if (!table || !tbody) {
     return;
   }
+  renderValidatedModelsTable();
 
   saveState();
 
@@ -1520,6 +1521,60 @@ function renderTrainingTable() {
     .join('');
 }
 
+function renderValidatedModelsTable() {
+  const tbody = document.querySelector('#validatedModelsTable tbody');
+  if (!tbody) return;
+  const rows = [];
+  const operatorFilter = window.validationOperatorFilter || null;
+  const postFilter = window.validationPostFilter || null;
+  for (let col = 0; col < operators.length; col++) {
+    const eligibleRows = [];
+    for (let row = 0; row < posts.length; row++) {
+      const level = data[row]?.[col];
+      if (!['L', 'U', 'Lкр'].includes(level)) continue;
+      if (operatorFilter && !operatorFilter.has(operators[col])) continue;
+      if (postFilter && !postFilter.has(posts[row])) continue;
+      eligibleRows.push(row);
+    }
+    eligibleRows.forEach((row, groupIndex) => {
+      const key = `${operatorIds[col]}|${postIds[row]}`;
+      const models = Array.isArray(validatedCarModels[key]) ? validatedCarModels[key] : [];
+      const operatorCell = groupIndex === 0
+        ? `<td class="validated-models-operator" rowspan="${eligibleRows.length}">${escapeHtml(operators[col])}</td>`
+        : '';
+      rows.push(`<tr class="validated-models-row${groupIndex === 0 ? ' validated-models-group-start' : ''}">${operatorCell}<td class="validation-post-cell">${escapeHtml(posts[row])}</td><td class="validation-model-cell"><input type="checkbox" ${models.includes('А1') ? 'checked' : ''} onchange="toggleValidatedModelPair(${col},${row},'А1',this.checked)"></td><td class="validation-model-cell"><input type="checkbox" ${models.includes('М3') ? 'checked' : ''} onchange="toggleValidatedModelPair(${col},${row},'М3',this.checked)"></td></tr>`);
+    });
+  }
+  tbody.innerHTML = rows.length ? rows.join('') : '<tr><td colspan="4" class="validated-models-empty">Нет операторов с квалификацией L, U или Lкр.</td></tr>';
+}
+
+function openValidationFilter(kind, anchor) {
+  document.querySelector('.validation-filter-menu')?.remove();
+  const values = kind === 'operator' ? operators.filter(Boolean) : posts.filter(Boolean);
+  const selected = (kind === 'operator' ? window.validationOperatorFilter : window.validationPostFilter) || new Set(values);
+  const menu = document.createElement('div'); menu.className = 'validation-filter-menu';
+  menu.innerHTML = `<input class="validation-filter-search" placeholder="Поиск…"><div class="validation-filter-actions"><button type="button" data-action="all">Выбрать всех</button><button type="button" data-action="none">Снять все</button></div><div class="validation-filter-options"></div><div class="validation-filter-footer"><button type="button" data-action="reset">Сбросить</button><button type="button" data-action="apply">Применить</button></div>`;
+  const options = menu.querySelector('.validation-filter-options');
+  const draw = query => { options.innerHTML = values.filter(v => v.toLowerCase().includes(query.toLowerCase())).map(v => `<label><input type="checkbox" value="${escapeHtml(v)}" ${selected.has(v) ? 'checked' : ''}> ${escapeHtml(v)}</label>`).join(''); };
+  draw(''); menu.querySelector('.validation-filter-search').oninput = e => draw(e.target.value);
+  menu.querySelector('[data-action="all"]').onclick = () => { values.forEach(v => selected.add(v)); draw(menu.querySelector('.validation-filter-search').value); };
+  menu.querySelector('[data-action="none"]').onclick = () => { selected.clear(); draw(menu.querySelector('.validation-filter-search').value); };
+  menu.querySelector('[data-action="reset"]').onclick = () => { if (kind === 'operator') delete window.validationOperatorFilter; else delete window.validationPostFilter; menu.remove(); renderValidatedModelsTable(); };
+  menu.querySelector('[data-action="apply"]').onclick = () => { const next = new Set([...options.querySelectorAll('input:checked')].map(input => input.value)); if (kind === 'operator') window.validationOperatorFilter = next; else window.validationPostFilter = next; menu.remove(); renderValidatedModelsTable(); };
+  document.body.appendChild(menu); const rect = anchor.getBoundingClientRect(); menu.style.left = `${Math.min(rect.left, innerWidth - 280)}px`; menu.style.top = `${rect.bottom + 4}px`;
+}
+
+function toggleValidatedModelPair(operatorIndex, postIndex, model, checked) {
+  if (!['А1', 'М3'].includes(model)) return;
+  const key = `${operatorIds[operatorIndex]}|${postIds[postIndex]}`;
+  const values = new Set(Array.isArray(validatedCarModels[key]) ? validatedCarModels[key] : []);
+  checked ? values.add(model) : values.delete(model);
+  const next = [...values].filter(value => value === 'А1' || value === 'М3');
+  if (next.length) validatedCarModels[key] = next; else delete validatedCarModels[key];
+  saveState(); renderValidatedModelsTable();
+  if (typeof renderMatrix === 'function') renderMatrix();
+}
+
 function toggleValidatedCarModel(recordIndex, model, checked) {
   if (!['А1', 'М3'].includes(model)) return;
   const record = trainingRecords[recordIndex];
@@ -1538,7 +1593,7 @@ function toggleValidatedCarModel(recordIndex, model, checked) {
   if (typeof renderMatrix === 'function') renderMatrix();
 }
 
-function showTrainingDateEditor(currentValue, onSave) {
+function showTrainingDateEditor(currentValue, onSave, minimumDate = '') {
   const overlay = document.createElement('div');
   overlay.style.cssText = `
     position: fixed;
@@ -1569,6 +1624,7 @@ function showTrainingDateEditor(currentValue, onSave) {
     value: trainingDateToIso(currentValue),
     label: 'Дата валидации'
   });
+  if (minimumDate) field.element.min = minimumDate;
   field.element.style.marginBottom = '14px';
 
   const error = document.createElement('div');
@@ -1606,6 +1662,12 @@ function showTrainingDateEditor(currentValue, onSave) {
       return;
     }
 
+    if (minimumDate && value && value < minimumDate) {
+      error.textContent = 'Дата валидации не может быть раньше даты начала обучения.';
+      error.style.display = 'block';
+      return;
+    }
+
     onSave(value ? formatInputDateToRu(value) : '—');
     close();
   };
@@ -1624,6 +1686,7 @@ function editTrainingField(index, field) {
   const record = trainingRecords[index];
 
   if (field === 'validDate') {
+    const minimumDate = trainingDateToIso(record.startDate);
     showTrainingDateEditor(record.validDate, normalizedDate => {
       record.validDate = normalizedDate;
 
@@ -1634,7 +1697,7 @@ function editTrainingField(index, field) {
       } else {
         renderTrainingTable();
       }
-    });
+    }, minimumDate);
     return;
   }
 
