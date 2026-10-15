@@ -77,40 +77,6 @@ function renderRotationApprovalControl() {
     : '<button class="btn-small" type="button" onclick="approveCurrentRotationPlan()">Утвердить план</button>';
 }
 
-function diagnoseRotationFacts() {
-  const date = getRotationViewDate();
-  const plan = getRotationSnapshot(date.getFullYear(), date.getMonth());
-  const table = document.getElementById('rotCalendarTable');
-  if (!plan || !table) { alert('План ротации за выбранный период не найден.'); return; }
-  const lines = [`Диагностика факта: ${date.getMonth() + 1}.${date.getFullYear()}`, `Всего событий: ${Array.isArray(placementFactEvents) ? placementFactEvents.length : 0}`, ''];
-  const mask = value => value ? `${String(value).slice(0, 1)}***` : '—';
-  (plan.rows || []).forEach((row, rowIndex) => (row || []).slice(1).forEach((value, dayIndex) => {
-    const operator = String(value || '').trim(); if (!operator || value === '+') return;
-    const post = (plan.posts || posts)[rowIndex];
-    const opIndex = Array.isArray(plan.operators) ? plan.operators.indexOf(operator) : operators.indexOf(operator);
-    const postIndex = (plan.posts || posts).indexOf(post);
-    const operatorId = plan.operatorIds?.[opIndex] || (Array.isArray(plan.operators) ? null : operatorIds[operators.indexOf(operator)]);
-    const postId = plan.postIds?.[postIndex] || (!plan.postIds && posts.filter(item => item === post).length === 1 ? postIds[posts.indexOf(post)] : null);
-    const events = (placementFactEvents || []).filter(event => event.operatorId === operatorId && event.postId === postId);
-    const status = rotationFactState(operator, post, plan.year, plan.month, dayIndex + 1, plan);
-    const cell = table.querySelector(`tbody tr:nth-child(${rowIndex + 1}) td:nth-child(${dayIndex + 2})`);
-    const css = cell ? [...cell.classList].filter(name => name.startsWith('rotation-fact-')).join(',') || '—' : 'ячейка не найдена';
-    const bg = cell ? getComputedStyle(cell).backgroundColor : '—';
-    const exactCurrentMatches = operators.reduce((count, item) => count + (item === operator ? 1 : 0), 0);
-    const currentMatchId = exactCurrentMatches === 1 ? operatorIds[operators.indexOf(operator)] : null;
-    const historicalIdsCount = Array.isArray(plan.operatorIds) ? plan.operatorIds.length : 0;
-    const historicalIdContainsCurrent = Boolean(currentMatchId && plan.operatorIds?.includes(currentMatchId));
-    const reason = !operatorId || !postId ? 'не удалось получить ID из snapshot' : events.length === 0 ? 'подходящие фактические события не найдены' : status !== 'green' ? 'события найдены, но rotationFactState не вернула green' : css === '—' ? 'green возвращён, но CSS-класс не добавлен' : 'совпадение подтверждено';
-    lines.push(`${dayIndex + 1}.${plan.month + 1}.${plan.year} | оператор=${mask(operator)} | пост=${mask(post)} | plan.operators=${Array.isArray(plan.operators)} | plan.operatorIds=${Array.isArray(plan.operatorIds)}(${historicalIdsCount}) | exactCurrentMatches=${exactCurrentMatches} | currentMatchId=${currentMatchId || '—'} | historicalIdContainsCurrent=${historicalIdContainsCurrent} | operatorId=${operatorId || '—'} | postId=${postId || '—'} | events=${events.map(event => `${event.eventType}:${event.operatorId}/${event.postId}/${event.timestamp}`).join(';') || '—'} | state=${status} | class=${css} | background=${bg} | причина=${reason}`);
-  }));
-  const overlay = document.createElement('div'); overlay.className = 'rotation-diagnostics-overlay';
-  const pre = document.createElement('pre'); pre.className = 'rotation-diagnostics-report'; pre.textContent = lines.join('\n');
-  const copy = document.createElement('button'); copy.textContent = 'Скопировать отчёт'; copy.onclick = () => navigator.clipboard?.writeText(pre.textContent);
-  const close = document.createElement('button'); close.textContent = 'Закрыть'; close.onclick = () => overlay.remove();
-  const actions = document.createElement('div'); actions.className = 'rotation-diagnostics-actions'; actions.append(copy, close);
-  const modal = document.createElement('section'); modal.className = 'rotation-diagnostics-modal'; modal.append(pre, actions); overlay.append(modal); document.body.append(overlay);
-}
-
 function editRotationCellComment(cell) {
   const date = getRotationViewDate();
   const day = Number(cell.getAttribute('data-day')) + 1;
@@ -1143,18 +1109,6 @@ function openRotationSettingsDialog() {
     const chainsDescription = document.createElement('div');
     chainsDescription.textContent = 'Максимальное количество независимых ротационных цепочек, которые могут выполняться одновременно. Одна цепочка считается одной единицей независимо от количества участвующих операторов. Одновременно выполняемые цепочки не могут использовать одних и тех же операторов или посты. Чем больше значение, тем больше ротаций может проходить параллельно при соблюдении безопасного покрытия линии';
     chainsDescription.style.cssText = 'color:#64748b;font-size:12px;line-height:1.45;';
-    const autoRotationLabel = document.createElement('label');
-    autoRotationLabel.style.cssText = 'display:flex;align-items:flex-start;gap:8px;margin-top:14px;color:#334155;font-size:13px;font-weight:600;cursor:pointer;';
-    const autoRotationInput = document.createElement('input');
-    autoRotationInput.type = 'checkbox';
-    autoRotationInput.checked = current.autoRotation === true;
-    autoRotationInput.style.cssText = 'margin:2px 0 0;flex:0 0 auto;';
-    const autoRotationText = document.createElement('span');
-    autoRotationText.textContent = 'Автоматическая ротация';
-    autoRotationLabel.append(autoRotationInput, autoRotationText);
-    const autoRotationDescription = document.createElement('div');
-    autoRotationDescription.textContent = 'Если включено, приложение автоматически переставляет операторов в матрице согласно утверждённому плану ротации на текущий день. После окончания ротационного блока операторы возвращаются на исходные посты. Если выключено, расстановка операторов выполняется вручную';
-    autoRotationDescription.style.cssText = 'margin:5px 0 0 26px;color:#64748b;font-size:12px;line-height:1.45;';
     const error = document.createElement('div');
     error.style.cssText = 'display:none;margin-top:7px;color:#dc2626;font-size:12px;';
     modal.append(
@@ -1164,8 +1118,6 @@ function openRotationSettingsDialog() {
       chainsLabel,
       chainsInput,
       chainsDescription,
-      autoRotationLabel,
-      autoRotationDescription,
       error
     );
 
@@ -1186,14 +1138,11 @@ function openRotationSettingsDialog() {
       savedPlans.rotationSettings = {
         durationWorkingDays: duration,
         maxConcurrentChains: maxChains,
-        autoRotation: autoRotationInput.checked
+        autoRotation: false
       };
       window.rotationSettings = getRotationSettings();
       savePlans();
       close();
-      if (window.rotationSettings.autoRotation) {
-        applyAutomaticRotation();
-      }
     };
     footer.append(cancel, save);
     modal.appendChild(footer);
@@ -1348,190 +1297,6 @@ function isTrainingPlacementLevel(level) {
   return level === 'Iкр' || level === 'I';
 }
 
-function buildAutomaticRotationPlan(plan, activeChains) {
-  const excludedRoles = new Set(['НУ', 'СО', 'ДС']);
-  const participants = [];
-  const reserves = [];
-  const seenReserves = new Set();
-  const seenOperators = new Set();
-  const seenDestinations = new Set();
-
-  for (const chain of activeChains) {
-    if (!Array.isArray(chain.participants) || chain.participants.length === 0) {
-      return { error: 'В сохранённой цепочке отсутствуют участники.' };
-    }
-    for (const participant of chain.participants) {
-      const opIndex = operators.indexOf(participant.operator);
-      if (opIndex < 0) {
-        return { error: `Оператор «${participant.operator}» отсутствует в текущей матрице.` };
-      }
-      if (seenOperators.has(opIndex)) {
-        return { error: `Оператор «${participant.operator}» участвует сразу в нескольких активных цепочках.` };
-      }
-      seenOperators.add(opIndex);
-      if (excludedRoles.has(operatorRoles[opIndex]) || !isRotationAttendance(opIndex)) {
-        return { error: `Оператор «${participant.operator}» недоступен по роли или явке.` };
-      }
-
-      const fromPost = participant.fromPost == null
-        ? null
-        : posts.indexOf(participant.fromPost);
-      const toPost = participant.toPost == null
-        ? null
-        : posts.indexOf(participant.toPost);
-      if (participant.fromPost != null && fromPost < 0) {
-        return { error: `Исходный пост участника «${participant.operator}» отсутствует в текущей матрице.` };
-      }
-      if (participant.toPost != null && toPost < 0) {
-        return { error: `Целевой пост участника «${participant.operator}» отсутствует в текущей матрице.` };
-      }
-      if (toPost !== null) {
-        if (seenDestinations.has(toPost)) {
-          return { error: 'Несколько активных цепочек используют один производственный пост.' };
-        }
-        seenDestinations.add(toPost);
-        if (!isRotationLevel(data[toPost]?.[opIndex])) {
-          return { error: `У оператора «${participant.operator}» нет уровня L/U на посту «${participant.toPost}».` };
-        }
-        if (
-          participant.fromPost !== toPost &&
-          attendanceData?.[toPost]?.[opIndex] !== '' &&
-          attendanceData?.[toPost]?.[opIndex] !== '○'
-        ) {
-          return { error: `Целевая ячейка «${participant.operator}» на посту «${participant.toPost}» изменена вручную.` };
-        }
-      }
-      participants.push({ opIndex, fromPost, toPost });
-    }
-    for (const reserve of chain.reserves || []) {
-      const opIndex = operators.indexOf(reserve.operator);
-      const postIndex = posts.indexOf(reserve.post);
-      if (opIndex < 0 || postIndex < 0 || operatorRoles[opIndex] !== 'ДС' ||
-        !isRotationAttendance(opIndex) || !isRotationLevel(data[postIndex]?.[opIndex]) ||
-        getCurrentOperatorPosts(opIndex).length > 0) {
-        return { error: `Резервный ДС «${reserve.operator}» недоступен для покрытия.` };
-      }
-      const key = `${opIndex}:${postIndex}`;
-      if (seenReserves.has(key)) return { error: 'Резервный ДС используется повторно.' };
-      if (seenDestinations.has(postIndex)) return { error: 'Резервный ДС конфликтует с целевым постом цепочки.' };
-      seenDestinations.add(postIndex);
-      seenReserves.add(key);
-      reserves.push({ opIndex, postIndex });
-    }
-  }
-
-  const participantByOperator = new Map(
-    participants.map(participant => [participant.opIndex, participant])
-  );
-  const reservedPosts = new Set();
-  for (const reserve of reserves) {
-    if (reservedPosts.has(reserve.postIndex)) return { error: 'Резервные закрыватели конфликтуют по посту.' };
-    reservedPosts.add(reserve.postIndex);
-  }
-  for (const participant of participants) {
-    const currentPosts = getCurrentOperatorPosts(participant.opIndex);
-    if (participant.fromPost === null) {
-      if (currentPosts.length > 0) {
-        return { error: `Оператор «${operators[participant.opIndex]}» по плану свободен, но фактически закреплён на посту.` };
-      }
-    } else if (currentPosts.length !== 1 || currentPosts[0] !== participant.fromPost) {
-      return { error: `Расстановка оператора «${operators[participant.opIndex]}» не совпадает с планом.` };
-    }
-  }
-  for (const reserve of reserves) finalCoverage[reserve.postIndex].add(reserve.opIndex);
-
-  // Целевой пост может быть занят только участником этой же перестановки.
-  // Формальное закрепление СО игнорируется: его кружок не изменяется.
-  for (const participant of participants) {
-    if (participant.toPost === null) continue;
-    for (let opIndex = 0; opIndex < operators.length; opIndex++) {
-      if (operatorRoles[opIndex] === 'СО') continue;
-      if (attendanceData?.[participant.toPost]?.[opIndex] !== '○') continue;
-      // Iкр/I могут оставаться на посту как обучаемые рядом с
-      // квалифицированным оператором и не блокируют его назначение.
-      if (isTrainingPlacementLevel(data[participant.toPost]?.[opIndex])) continue;
-      const occupant = participantByOperator.get(opIndex);
-      if (!occupant || occupant.fromPost !== participant.toPost) {
-        return { error: `Пост «${posts[participant.toPost]}» занят оператором, не входящим в активную цепочку.` };
-      }
-    }
-  }
-
-  // Для покрытия считаются только самостоятельные квалифицированные
-  // операторы. Iкр/I могут находиться на посту в рамках обучения и не
-  // являются вторым производственным покрытием.
-  const initialCoverage = posts.map((_, postIndex) => new Set(
-    operators
-      .map((_, opIndex) => opIndex)
-      .filter(opIndex =>
-        operatorRoles[opIndex] !== 'СО' &&
-        attendanceData?.[postIndex]?.[opIndex] === '○' &&
-        isIndependentProductionLevel(data[postIndex]?.[opIndex])
-      )
-  ));
-  const finalCoverage = initialCoverage.map(set => new Set(set));
-  for (const participant of participants) {
-    if (participant.fromPost !== null) finalCoverage[participant.fromPost].delete(participant.opIndex);
-    if (participant.toPost !== null) finalCoverage[participant.toPost].add(participant.opIndex);
-  }
-  const trainingByPost = posts.map((_, postIndex) =>
-    operators
-      .map((_, opIndex) => opIndex)
-      .filter(opIndex =>
-        operatorRoles[opIndex] !== 'СО' &&
-        (attendanceData?.[postIndex]?.[opIndex] === '○' ||
-          attendanceData?.[postIndex]?.[opIndex] === '△') &&
-        isTrainingPlacementLevel(data[postIndex]?.[opIndex])
-      )
-  );
-  for (let postIndex = 0; postIndex < posts.length; postIndex++) {
-    if (trainingByPost[postIndex].length > 0 && finalCoverage[postIndex].size === 0) {
-      const trainees = trainingByPost[postIndex]
-        .map(opIndex => operators[opIndex])
-        .join(', ');
-      return {
-        error: `Конфликт обучения на посту «${posts[postIndex]}»: ` +
-          `оператор(ы) ${trainees} останутся без квалифицированного L/U.`
-      };
-    }
-    if (initialCoverage[postIndex].size > 0 && finalCoverage[postIndex].size === 0) {
-      return { error: `Пост «${posts[postIndex]}» потеряет производственное покрытие.` };
-    }
-    if (finalCoverage[postIndex].size > 1) {
-      return { error: `На пост «${posts[postIndex]}» назначается более одного производственного оператора.` };
-    }
-  }
-
-  const changes = new Map();
-  const addChange = (postIndex, opIndex, nextValue) => {
-    if (postIndex === null || postIndex === undefined) return;
-    const key = `${postIndex}:${opIndex}`;
-    if (!changes.has(key)) {
-      changes.set(key, {
-        post: posts[postIndex],
-        operator: operators[opIndex],
-        previousValue: attendanceData[postIndex][opIndex] || '',
-        nextValue
-      });
-    } else {
-      changes.get(key).nextValue = nextValue;
-    }
-  };
-  for (const participant of participants) {
-    if (participant.fromPost !== null && participant.fromPost !== participant.toPost) {
-      addChange(participant.fromPost, participant.opIndex, '');
-    }
-    if (participant.toPost !== null && participant.fromPost !== participant.toPost) {
-      if (attendanceData[participant.toPost][participant.opIndex] === '○') {
-        return { error: `Целевой кружок оператора «${operators[participant.opIndex]}» уже изменён вручную.` };
-      }
-      addChange(participant.toPost, participant.opIndex, '○');
-    }
-  }
-
-  return { participants, reserves, changes: [...changes.values()] };
-}
-
 function restoreAutomaticRotationState() {
   if (!autoRotationState || !Array.isArray(autoRotationState.changes)) return true;
   let changed = false;
@@ -1576,92 +1341,72 @@ function restoreAutomaticRotationState() {
   return !conflicts;
 }
 
-function applyAutomaticRotation() {
-  const settings = getRotationSettings();
-  if (!settings.autoRotation) return;
-
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = today.getMonth();
-  const monthKey = planMonthKey(year, month);
-  const snapshot = getRotationSnapshot(year, month);
-  const activeChains = getActiveRotationChains(snapshot, today);
-
-  if (activeChains.length === 0) {
-    restoreAutomaticRotationState();
-    return;
-  }
-
-  const chainIds = activeChains.map(chain => chain.id).sort((a, b) => Number(a) - Number(b));
-  const chainSignature = activeChains.map(chain => ({
-    id: chain.id,
-    startDay: chain.startDay,
-    endDay: chain.endDay,
-    participants: (chain.participants || []).map(participant => ({
-      operator: participant.operator,
-      fromPost: participant.fromPost,
-      toPost: participant.toPost
-    }))
-  }));
-  const signature = `${monthKey}:${today.getDate()}:${JSON.stringify(chainSignature)}`;
-  if (autoRotationState?.signature === signature) {
-    const cellsIntact = autoRotationState.changes.every(change => {
-      const postIndex = posts.indexOf(change.post);
-      const opIndex = operators.indexOf(change.operator);
-      return postIndex >= 0 && opIndex >= 0 &&
-        attendanceData?.[postIndex]?.[opIndex] === change.nextValue;
+function openRotationPlacementAssistant() {
+  const old = document.getElementById('rotationPlacementAssistant');
+  if (old) { old.remove(); return; }
+  const now = new Date();
+  const snapshot = getRotationSnapshot(now.getFullYear(), now.getMonth());
+  const overlay = document.createElement('div');
+  overlay.id = 'rotationPlacementAssistant';
+  overlay.className = 'rotation-assistant-overlay';
+  const modal = document.createElement('section');
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.className = 'rotation-assistant-modal';
+  const header = document.createElement('header'); header.className = 'rotation-assistant-header';
+  const titleWrap = document.createElement('div');
+  const title = document.createElement('h2'); title.textContent = 'Расстановка по плану ротации';
+  const subtitle = document.createElement('p'); subtitle.textContent = `План на ${now.toLocaleDateString('ru-RU')}`;
+  titleWrap.append(title, subtitle); header.appendChild(titleWrap);
+  const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = event => { if (event.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  const closeButton = document.createElement('button');
+  closeButton.type = 'button'; closeButton.className = 'rotation-assistant-close'; closeButton.textContent = '×'; closeButton.setAttribute('aria-label', 'Закрыть'); closeButton.onclick = close;
+  header.appendChild(closeButton); modal.appendChild(header);
+  if (!snapshot) {
+    const empty = document.createElement('p'); empty.className = 'rotation-assistant-empty'; empty.textContent = 'На выбранную дату план ротации отсутствует'; modal.appendChild(empty);
+  } else {
+    const summary = document.createElement('div'); summary.className = 'rotation-assistant-summary';
+    const list = document.createElement('div'); list.className = 'rotation-assistant-list';
+    const counts = { 'Выполнено': 0, 'Ожидает выполнения': 0, 'Несоответствие': 0, 'Требует проверки': 0 };
+    const chains = getActiveRotationChains(snapshot, now);
+    const currentPost = name => {
+      const historicalIndex = Array.isArray(snapshot.operators)
+        ? snapshot.operators.indexOf(name) : -1;
+      const historicalId = historicalIndex >= 0 ? snapshot.operatorIds?.[historicalIndex] : null;
+      const matches = operators.map((operator, index) => ({ operator, index }))
+        .filter(item => historicalId && Array.isArray(operatorIds)
+          ? operatorIds[item.index] === historicalId
+          : item.operator === name);
+      if (matches.length !== 1) return { post: null, uncertain: true };
+      const index = matches[0].index;
+      return { post: posts.find((post, row) => attendanceData?.[row]?.[index] === '○') || null, uncertain: false };
+    };
+    chains.flatMap(chain => chain.participants || []).forEach(participant => {
+      const currentInfo = currentPost(participant.operator);
+      const current = currentInfo.post;
+      const status = currentInfo.uncertain ? 'Требует проверки' : current === participant.toPost ? 'Выполнено' : current === participant.fromPost ? 'Ожидает выполнения' : 'Несоответствие';
+      counts[status] = (counts[status] || 0) + 1;
+      const row = document.createElement('article'); row.className = 'rotation-assistant-item';
+      const top = document.createElement('div'); top.className = 'rotation-assistant-item-top';
+      const operator = document.createElement('strong'); operator.textContent = participant.operator;
+      const statusCell = document.createElement('span'); statusCell.textContent = status; statusCell.className = `rotation-assistant-status rotation-assistant-status-${status === 'Выполнено' ? 'done' : status === 'Ожидает выполнения' ? 'pending' : status === 'Несоответствие' ? 'conflict' : 'review'}`;
+      top.append(operator, statusCell);
+      const plan = document.createElement('div'); plan.className = 'rotation-assistant-line'; plan.textContent = `План: ${participant.fromPost || '—'} → ${participant.toPost || '—'}`;
+      const actual = document.createElement('div'); actual.className = 'rotation-assistant-line rotation-assistant-actual'; actual.textContent = `Фактически: ${current || 'отсутствует'}`;
+      row.append(top, plan, actual); list.appendChild(row);
     });
-    const postsIntact = !Array.isArray(autoRotationState.postStates) ||
-      autoRotationState.postStates.every(postState => {
-        const postIndex = posts.indexOf(postState.post);
-        return postIndex >= 0 &&
-          JSON.stringify(getAutomaticPostOperators(postIndex)) ===
-          JSON.stringify(postState.after || []);
-      });
-    if (!cellsIntact || !postsIntact) {
-      automaticRotationWarning(
-        'Авторотация остановлена: текущая расстановка вручную отличается от применённого плана. Ручные изменения не перезаписаны.',
-        `conflict:${signature}`
-      );
-    }
-    return;
+    if (!list.childElementCount) { const empty = document.createElement('p'); empty.className = 'rotation-assistant-empty'; empty.textContent = 'На выбранную дату план ротации отсутствует'; modal.appendChild(empty); }
+    else { Object.entries(counts).forEach(([label, count]) => { if (!count) return; const item = document.createElement('span'); item.textContent = `${label}: ${count}`; summary.appendChild(item); }); modal.append(summary, list); }
   }
-
-  if (autoRotationState) restoreAutomaticRotationState();
-
-  const prepared = buildAutomaticRotationPlan(snapshot, activeChains);
-  if (prepared.error) {
-    automaticRotationWarning(
-      `Авторотация не применена: ${prepared.error}`,
-      `apply:${signature}:${prepared.error}`
-    );
-    return;
-  }
-
-  for (const change of prepared.changes) {
-    const postIndex = posts.indexOf(change.post);
-    const opIndex = operators.indexOf(change.operator);
-    attendanceData[postIndex][opIndex] = change.nextValue;
-  }
-  const affectedPosts = [...new Set(prepared.changes.map(change => change.post))];
-  autoRotationState = {
-    signature,
-    monthKey,
-    day: today.getDate(),
-    chainIds,
-    changes: prepared.changes,
-    postStates: affectedPosts.map(post => ({
-      post,
-      after: getAutomaticPostOperators(posts.indexOf(post))
-    })),
-    appliedAt: new Date().toISOString()
-  };
-  saveAutomaticRotationState();
-  if (typeof saveState === 'function') saveState();
-  if (typeof renderMatrix === 'function') renderMatrix();
+  const footer = document.createElement('div'); footer.className = 'rotation-assistant-footer';
+  const done = document.createElement('button'); done.type = 'button'; done.className = 'rotation-assistant-done'; done.textContent = 'Закрыть'; done.onclick = close;
+  footer.appendChild(done); modal.appendChild(footer);
+  overlay.appendChild(modal); overlay.addEventListener('click', event => { if (event.target === overlay) close(); }); document.body.appendChild(overlay);
 }
 
-window.applyAutomaticRotation = applyAutomaticRotation;
+
 
 let activePlanGeneration = null;
 let activePlanGenerationOverlay = null;
@@ -1827,7 +1572,6 @@ function wrapPlanGenerator(type, functionName, tableId, color) {
         }
         capturePlan(type, tableId, true);
         restorePlan(type, tableId, color);
-        if (type === 'rotation') applyAutomaticRotation();
       } catch (error) {
         savedPlans = plansBackup;
         try { localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify(savedPlans)); } catch (_) {}
@@ -1889,18 +1633,14 @@ setTimeout(() => {
   restorePlan('development', 'devCalendarTable', '#2563eb');
   restorePlan('rotation', 'rotCalendarTable', '#16a34a');
   renderRotationApprovalControl();
-  applyAutomaticRotation();
   scheduleRotationFactRefresh();
   showMonthlyPlanningReminder();
 }, 0);
 
 // Проверяем дату периодически, чтобы открытое приложение переключало
 // авторотацию в начале нового дня без перезагрузки страницы.
-setInterval(applyAutomaticRotation, 60 * 1000);
-window.addEventListener('focus', applyAutomaticRotation);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {
-    applyAutomaticRotation();
     refreshRotationCalendar();
     scheduleRotationFactRefresh();
   }

@@ -141,8 +141,6 @@ function renderMatrix() {
     new Array(operators.length).fill(false);
 
   for (let c = 0; c < operators.length; c++) {
-    if (isOtherSectorOperator(c)) continue;
-
     for (let r = 0; r < posts.length; r++) {
       if (
         attendanceData[r][c] === '○' ||
@@ -188,7 +186,6 @@ function renderMatrix() {
         colspan="2"
         data-operator-index="${index}"
         style="cursor:pointer;"
-        onclick="showOperatorMenu(event, '${operator}', ${index})"
       >${operator}</th>
     `).join('') +
 
@@ -205,6 +202,10 @@ function renderMatrix() {
     '</th>';
 
   thead.appendChild(trNames);
+  trNames.querySelectorAll('[data-operator-index]').forEach(cell => {
+    const index = Number(cell.dataset.operatorIndex);
+    cell.onclick = event => showOperatorMenu(event, operators[index], index);
+  });
 
   trNames.querySelector('.matrix-cover-column').title =
     'Покрытие U по посту: количество операторов с уровнем U';

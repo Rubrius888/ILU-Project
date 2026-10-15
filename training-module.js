@@ -1527,8 +1527,13 @@ function renderValidatedModelsTable() {
   const rows = [];
   const operatorFilter = window.validationOperatorFilter || null;
   const postFilter = window.validationPostFilter || null;
+  const groupColors = new Map();
+  let nextGroupColor = 0;
   for (let col = 0; col < operators.length; col++) {
     const eligibleRows = [];
+    const operatorId = operatorIds[col];
+    if (!groupColors.has(operatorId)) groupColors.set(operatorId, nextGroupColor++ % 4);
+    const groupClass = `validated-group-color-${groupColors.get(operatorId)}`;
     for (let row = 0; row < posts.length; row++) {
       const level = data[row]?.[col];
       if (!['L', 'U', 'Lкр'].includes(level)) continue;
@@ -1542,14 +1547,26 @@ function renderValidatedModelsTable() {
       const operatorCell = groupIndex === 0
         ? `<td class="validated-models-operator" rowspan="${eligibleRows.length}">${escapeHtml(operators[col])}</td>`
         : '';
-      rows.push(`<tr class="validated-models-row${groupIndex === 0 ? ' validated-models-group-start' : ''}">${operatorCell}<td class="validation-post-cell">${escapeHtml(posts[row])}</td><td class="validation-model-cell"><input type="checkbox" ${models.includes('А1') ? 'checked' : ''} onchange="toggleValidatedModelPair(${col},${row},'А1',this.checked)"></td><td class="validation-model-cell"><input type="checkbox" ${models.includes('М3') ? 'checked' : ''} onchange="toggleValidatedModelPair(${col},${row},'М3',this.checked)"></td></tr>`);
+      rows.push(`<tr class="validated-models-row ${groupClass}${groupIndex === 0 ? ' validated-models-group-start' : ''}">${operatorCell.replace('validated-models-operator', `validated-models-operator ${groupClass}`)}<td class="validation-post-cell">${escapeHtml(posts[row])}</td><td class="validation-model-cell"><input type="checkbox" ${models.includes('А1') ? 'checked' : ''} onchange="toggleValidatedModelPair(${col},${row},'А1',this.checked)"></td><td class="validation-model-cell"><input type="checkbox" ${models.includes('М3') ? 'checked' : ''} onchange="toggleValidatedModelPair(${col},${row},'М3',this.checked)"></td></tr>`);
     });
   }
   tbody.innerHTML = rows.length ? rows.join('') : '<tr><td colspan="4" class="validated-models-empty">Нет операторов с квалификацией L, U или Lкр.</td></tr>';
 }
 
+function closeValidationFilterMenu() {
+  const menu = document.querySelector('.validation-filter-menu');
+  if (!menu) return;
+  window.removeEventListener('resize', menu.__reposition);
+  window.removeEventListener('scroll', menu.__reposition, true);
+  document.removeEventListener('keydown', menu.__escape);
+  document.removeEventListener('mousedown', menu.__outside, true);
+  menu.remove();
+}
+
 function openValidationFilter(kind, anchor) {
-  document.querySelector('.validation-filter-menu')?.remove();
+  const existing = document.querySelector('.validation-filter-menu');
+  if (existing && existing.__kind === kind) { closeValidationFilterMenu(); return; }
+  closeValidationFilterMenu();
   const values = kind === 'operator' ? operators.filter(Boolean) : posts.filter(Boolean);
   const selected = (kind === 'operator' ? window.validationOperatorFilter : window.validationPostFilter) || new Set(values);
   const menu = document.createElement('div'); menu.className = 'validation-filter-menu';
@@ -1561,7 +1578,31 @@ function openValidationFilter(kind, anchor) {
   menu.querySelector('[data-action="none"]').onclick = () => { selected.clear(); draw(menu.querySelector('.validation-filter-search').value); };
   menu.querySelector('[data-action="reset"]').onclick = () => { if (kind === 'operator') delete window.validationOperatorFilter; else delete window.validationPostFilter; menu.remove(); renderValidatedModelsTable(); };
   menu.querySelector('[data-action="apply"]').onclick = () => { const next = new Set([...options.querySelectorAll('input:checked')].map(input => input.value)); if (kind === 'operator') window.validationOperatorFilter = next; else window.validationPostFilter = next; menu.remove(); renderValidatedModelsTable(); };
-  document.body.appendChild(menu); const rect = anchor.getBoundingClientRect(); menu.style.left = `${Math.min(rect.left, innerWidth - 280)}px`; menu.style.top = `${rect.bottom + 4}px`;
+  menu.__kind = kind;
+  document.body.appendChild(menu);
+  const reposition = () => {
+    if (!menu.isConnected) return;
+    const rect = anchor.getBoundingClientRect();
+    const margin = 8;
+    const menuRect = menu.getBoundingClientRect();
+    const maxHeight = Math.max(120, innerHeight - margin * 2);
+    menu.style.maxHeight = `${maxHeight}px`;
+    const measured = menu.getBoundingClientRect();
+    const topDown = rect.bottom + 4;
+    const topUp = rect.top - measured.height - 4;
+    const top = topDown + measured.height <= innerHeight - margin
+      ? topDown
+      : Math.max(margin, topUp);
+    const left = Math.min(Math.max(margin, rect.left), Math.max(margin, innerWidth - measured.width - margin));
+    menu.style.left = `${left}px`;
+    menu.style.top = `${Math.min(Math.max(margin, top), Math.max(margin, innerHeight - measured.height - margin))}px`;
+  };
+  const escape = event => { if (event.key === 'Escape') closeValidationFilterMenu(); };
+  const outside = event => { if (!menu.contains(event.target) && event.target !== anchor) closeValidationFilterMenu(); };
+  menu.__reposition = reposition; menu.__escape = escape; menu.__outside = outside;
+  window.addEventListener('resize', reposition); window.addEventListener('scroll', reposition, true);
+  document.addEventListener('keydown', escape); document.addEventListener('mousedown', outside, true);
+  requestAnimationFrame(reposition);
 }
 
 function toggleValidatedModelPair(operatorIndex, postIndex, model, checked) {

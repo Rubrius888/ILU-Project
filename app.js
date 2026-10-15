@@ -46,6 +46,13 @@ if (!restoredState && !storedStateExists) {
 
 initializePlacementFactTracking();
 
+// После восстановления состояния зафиксировать первичную расстановку
+// текущего рабочего дня. Функция сама пропускает пустую матрицу и повторный
+// запуск в тот же день.
+if (typeof ensureDailyInitialPlacement === 'function') {
+  ensureDailyInitialPlacement();
+}
+
 if (!restoredState && storedStateExists && storageLoadError) {
   setTimeout(() => {
     alert(

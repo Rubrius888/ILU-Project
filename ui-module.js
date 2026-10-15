@@ -465,27 +465,30 @@ function showOperatorMenu(event, name, index) {
     operatorIndex !== -1 && operatorIndex < operators.length - 1;
 
   menu.innerHTML = `
-    <div class="${canMoveLeft ? '' : 'disabled'}"
-      ${canMoveLeft ? `onclick="moveOperator(${operatorIndex}, -1);hideMenu();"` : 'aria-disabled="true"'}>
+    <div data-action="move-left" class="${canMoveLeft ? '' : 'disabled'}" ${canMoveLeft ? '' : 'aria-disabled="true"'}>
       ◀ Переместить влево
     </div>
 
-    <div class="${canMoveRight ? '' : 'disabled'}"
-      ${canMoveRight ? `onclick="moveOperator(${operatorIndex}, 1);hideMenu();"` : 'aria-disabled="true"'}>
+    <div data-action="move-right" class="${canMoveRight ? '' : 'disabled'}" ${canMoveRight ? '' : 'aria-disabled="true"'}>
       ▶ Переместить вправо
     </div>
 
-    <div onclick="editOperator('${name}');hideMenu();">
+    <div data-action="edit">
       ✏️ Редактировать
     </div>
 
-    <div
-      class="danger"
-      onclick="deleteOperator('${name}');hideMenu();"
-    >
+    <div data-action="delete" class="danger">
       🗑️ Удалить
     </div>
   `;
+  const bind = (action, handler) => {
+    const item = menu.querySelector(`[data-action="${action}"]`);
+    if (item && !item.classList.contains('disabled')) item.onclick = event => { event.stopPropagation(); handler(); hideMenu(); };
+  };
+  bind('move-left', () => moveOperator(operatorIndex, -1));
+  bind('move-right', () => moveOperator(operatorIndex, 1));
+  bind('edit', () => editOperator(operators[operatorIndex]));
+  bind('delete', () => deleteOperator(operators[operatorIndex]));
 
   menu.style.position = 'fixed';
 
@@ -511,28 +514,27 @@ function showPostMenu(event, name, index) {
   const canMoveDown =
     postIndex !== -1 && postIndex < posts.length - 1;
 
-  menu.innerHTML = `
-    <div class="${canMoveUp ? '' : 'disabled'}"
-      ${canMoveUp ? `onclick="movePost(${postIndex}, -1);hideMenu();"` : 'aria-disabled="true"'}>
-      ▲ Переместить вверх
-    </div>
+  const addAction = (label, action, disabled = false, danger = false) => {
+    const item = document.createElement('div');
+    item.textContent = label;
+    if (danger) item.className = 'danger';
+    if (disabled) {
+      item.classList.add('disabled');
+      item.setAttribute('aria-disabled', 'true');
+    } else {
+      item.addEventListener('click', event => {
+        event.stopPropagation();
+        action();
+        hideMenu();
+      });
+    }
+    menu.appendChild(item);
+  };
 
-    <div class="${canMoveDown ? '' : 'disabled'}"
-      ${canMoveDown ? `onclick="movePost(${postIndex}, 1);hideMenu();"` : 'aria-disabled="true"'}>
-      ▼ Переместить вниз
-    </div>
-
-    <div onclick="editPost('${name}');hideMenu();">
-      ✏️ Редактировать
-    </div>
-
-    <div
-      class="danger"
-      onclick="deletePost('${name}');hideMenu();"
-    >
-      🗑️ Удалить
-    </div>
-  `;
+  addAction('▲ Переместить вверх', () => movePost(postIndex, -1), !canMoveUp);
+  addAction('▼ Переместить вниз', () => movePost(postIndex, 1), !canMoveDown);
+  addAction('✏️ Редактировать', () => editPost(posts[postIndex]));
+  addAction('🗑️ Удалить', () => deletePost(posts[postIndex]), false, true);
 
   menu.style.position = 'fixed';
 
@@ -553,6 +555,7 @@ document.addEventListener('click', event => {
 // ======================== ВКЛАДКИ ========================
 
 function openTab(event, id) {
+  if (typeof closeValidationFilterMenu === 'function') closeValidationFilterMenu();
     // Закрываем открытые всплывающие окна выбора
   document.querySelectorAll('.inline-select').forEach(el => {
     if (typeof el.__close === 'function') {

@@ -170,6 +170,28 @@ function logPlacement(opName, postName, reason = '', lifecycle = {}) {
 function ensureDailyInitialPlacement() {
   const today = new Date().toLocaleDateString('ru-RU');
 
+  // Сохраняем только состояние, которое изменяет эта функция. Это позволяет
+  // безопасно вернуть память в исходное состояние при отказе хранилища.
+  const previousPlacementLog = Array.isArray(placementLog)
+    ? placementLog.slice()
+    : placementLog;
+  const previousInitialPlacementDate = placementInitialPlacementDate;
+  const persistOrRollback = (successValue) => {
+    try {
+      if (saveState() === false) {
+        placementLog = previousPlacementLog;
+        placementInitialPlacementDate = previousInitialPlacementDate;
+        return false;
+      }
+      return successValue;
+    } catch (error) {
+      placementLog = previousPlacementLog;
+      placementInitialPlacementDate = previousInitialPlacementDate;
+      console.error('Не удалось сохранить первичную расстановку:', error);
+      return false;
+    }
+  };
+
   if (placementInitialPlacementDate === today) {
     return false;
   }
@@ -181,8 +203,7 @@ function ensureDailyInitialPlacement() {
     entry.reason === 'Первичная расстановка'
   )) {
     placementInitialPlacementDate = today;
-    saveState();
-    return false;
+    return persistOrRollback(false);
   }
 
   const assignments = [];
@@ -221,8 +242,7 @@ function ensureDailyInitialPlacement() {
   });
 
   placementInitialPlacementDate = today;
-  saveState();
-  return true;
+  return persistOrRollback(true);
 }
 
 //Сортировка журнала расстановки
