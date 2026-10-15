@@ -77,6 +77,40 @@ function renderRotationApprovalControl() {
     : '<button class="btn-small" type="button" onclick="approveCurrentRotationPlan()">Утвердить план</button>';
 }
 
+function diagnoseRotationFacts() {
+  const date = getRotationViewDate();
+  const plan = getRotationSnapshot(date.getFullYear(), date.getMonth());
+  const table = document.getElementById('rotCalendarTable');
+  if (!plan || !table) { alert('План ротации за выбранный период не найден.'); return; }
+  const lines = [`Диагностика факта: ${date.getMonth() + 1}.${date.getFullYear()}`, `Всего событий: ${Array.isArray(placementFactEvents) ? placementFactEvents.length : 0}`, ''];
+  const mask = value => value ? `${String(value).slice(0, 1)}***` : '—';
+  (plan.rows || []).forEach((row, rowIndex) => (row || []).slice(1).forEach((value, dayIndex) => {
+    const operator = String(value || '').trim(); if (!operator || value === '+') return;
+    const post = (plan.posts || posts)[rowIndex];
+    const opIndex = Array.isArray(plan.operators) ? plan.operators.indexOf(operator) : operators.indexOf(operator);
+    const postIndex = (plan.posts || posts).indexOf(post);
+    const operatorId = plan.operatorIds?.[opIndex] || (Array.isArray(plan.operators) ? null : operatorIds[operators.indexOf(operator)]);
+    const postId = plan.postIds?.[postIndex] || (!plan.postIds && posts.filter(item => item === post).length === 1 ? postIds[posts.indexOf(post)] : null);
+    const events = (placementFactEvents || []).filter(event => event.operatorId === operatorId && event.postId === postId);
+    const status = rotationFactState(operator, post, plan.year, plan.month, dayIndex + 1, plan);
+    const cell = table.querySelector(`tbody tr:nth-child(${rowIndex + 1}) td:nth-child(${dayIndex + 2})`);
+    const css = cell ? [...cell.classList].filter(name => name.startsWith('rotation-fact-')).join(',') || '—' : 'ячейка не найдена';
+    const bg = cell ? getComputedStyle(cell).backgroundColor : '—';
+    const exactCurrentMatches = operators.reduce((count, item) => count + (item === operator ? 1 : 0), 0);
+    const currentMatchId = exactCurrentMatches === 1 ? operatorIds[operators.indexOf(operator)] : null;
+    const historicalIdsCount = Array.isArray(plan.operatorIds) ? plan.operatorIds.length : 0;
+    const historicalIdContainsCurrent = Boolean(currentMatchId && plan.operatorIds?.includes(currentMatchId));
+    const reason = !operatorId || !postId ? 'не удалось получить ID из snapshot' : events.length === 0 ? 'подходящие фактические события не найдены' : status !== 'green' ? 'события найдены, но rotationFactState не вернула green' : css === '—' ? 'green возвращён, но CSS-класс не добавлен' : 'совпадение подтверждено';
+    lines.push(`${dayIndex + 1}.${plan.month + 1}.${plan.year} | оператор=${mask(operator)} | пост=${mask(post)} | plan.operators=${Array.isArray(plan.operators)} | plan.operatorIds=${Array.isArray(plan.operatorIds)}(${historicalIdsCount}) | exactCurrentMatches=${exactCurrentMatches} | currentMatchId=${currentMatchId || '—'} | historicalIdContainsCurrent=${historicalIdContainsCurrent} | operatorId=${operatorId || '—'} | postId=${postId || '—'} | events=${events.map(event => `${event.eventType}:${event.operatorId}/${event.postId}/${event.timestamp}`).join(';') || '—'} | state=${status} | class=${css} | background=${bg} | причина=${reason}`);
+  }));
+  const overlay = document.createElement('div'); overlay.className = 'rotation-diagnostics-overlay';
+  const pre = document.createElement('pre'); pre.className = 'rotation-diagnostics-report'; pre.textContent = lines.join('\n');
+  const copy = document.createElement('button'); copy.textContent = 'Скопировать отчёт'; copy.onclick = () => navigator.clipboard?.writeText(pre.textContent);
+  const close = document.createElement('button'); close.textContent = 'Закрыть'; close.onclick = () => overlay.remove();
+  const actions = document.createElement('div'); actions.className = 'rotation-diagnostics-actions'; actions.append(copy, close);
+  const modal = document.createElement('section'); modal.className = 'rotation-diagnostics-modal'; modal.append(pre, actions); overlay.append(modal); document.body.append(overlay);
+}
+
 function editRotationCellComment(cell) {
   const date = getRotationViewDate();
   const day = Number(cell.getAttribute('data-day')) + 1;
@@ -116,9 +150,37 @@ function editRotationCellComment(cell) {
   requestAnimationFrame(() => { textarea.focus(); textarea.setSelectionRange(textarea.value.length, textarea.value.length); });
 }
 
-function rotationFactState(operatorName, postName, year, month, day) {
-  const operatorId = operatorIds[operators.indexOf(operatorName)];
-  const postId = postIds[posts.indexOf(postName)];
+function rotationFactState(operatorName, postName, year, month, day, snapshot = null) {
+  const context = snapshot && typeof snapshot === 'object' ? snapshot : null;
+  const contextOperators = Array.isArray(context?.operators) ? context.operators : operators;
+  const contextPosts = Array.isArray(context?.posts) ? context.posts : posts;
+  const contextOperatorIds = Array.isArray(context?.operatorIds) ? context.operatorIds : (context ? null : operatorIds);
+  const contextPostIds = Array.isArray(context?.postIds) ? context.postIds : (context ? null : postIds);
+  const contextOperatorIndex = contextOperators.indexOf(operatorName);
+  const currentOperatorId = operators.filter(item => item === operatorName).length === 1
+    ? operatorIds[operators.indexOf(operatorName)]
+    : null;
+  const hasHistoricalOperatorIds = Array.isArray(context?.operatorIds) && context.operatorIds.length > 0;
+  const historicalNameIsUnique = Array.isArray(context?.operators) &&
+    context.operators.filter(item => item === operatorName).length === 1;
+  const currentNameIsUnique = operators.filter(item => item === operatorName).length === 1;
+  if (context && hasHistoricalOperatorIds && historicalNameIsUnique && currentNameIsUnique &&
+      contextOperatorIds[contextOperatorIndex] !== currentOperatorId) {
+    return 'neutral';
+  }
+  const operatorId = contextOperatorIds?.[contextOperatorIndex] || (
+    context && Array.isArray(context.operators) && !hasHistoricalOperatorIds &&
+    historicalNameIsUnique && currentNameIsUnique && currentOperatorId
+      ? currentOperatorId
+      : null
+  );
+  const contextPostIndex = contextPosts.indexOf(postName);
+  const postId = contextPostIds?.[contextPostIndex] || (
+    context && !Array.isArray(context.postIds) &&
+    posts.filter(item => item === postName).length === 1
+      ? postIds[posts.indexOf(postName)]
+      : null
+  );
   if (!operatorId || !postId || !Array.isArray(placementFactEvents)) return 'neutral';
   const startOfDay = new Date(year, month, day, 0, 0, 0, 0).getTime();
   const endOfDay = new Date(year, month, day + 1, 0, 0, 0, 0).getTime();
@@ -698,7 +760,7 @@ function restorePlan(type, tableId, color, explicitPlan = null) {
           cell.title = `Цепочка ${chainId}`;
         }
         if (type === 'rotation' && isRotationApproved(plan.year, plan.month)) {
-          const factState = rotationFactState(operator, (plan.posts || posts)[rowIndex], plan.year, plan.month, columnIndex);
+          const factState = rotationFactState(operator, (plan.posts || posts)[rowIndex], plan.year, plan.month, columnIndex, plan);
           cell.classList.add(`rotation-fact-${factState}`);
         }
       } else {

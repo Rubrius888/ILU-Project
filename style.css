@@ -2019,6 +2019,10 @@ body {
 .rotation-fact-red { background-color:#fee2e2 !important; color:#991b1b !important; }
 .rotation-fact-neutral { background-color:#f8fafc !important; }
 .rotation-fact-legend { margin:8px 0; color:#475569; font-size:12px; }
+.rotation-diagnostics-overlay { position:fixed; inset:0; z-index:10030; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(15,23,42,.6); }
+.rotation-diagnostics-modal { width:min(1100px,100%); max-height:calc(100vh - 32px); overflow:auto; padding:16px; border-radius:10px; background:#fff; box-shadow:0 20px 60px rgba(0,0,0,.35); }
+.rotation-diagnostics-report { max-height:65vh; overflow:auto; white-space:pre-wrap; font:12px/1.45 monospace; }
+.rotation-diagnostics-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
 .validated-models-heading { margin:24px 0 10px; color:#334155; }
 .validated-models-table { width:100%; max-width:1120px; margin:0 auto; table-layout:fixed; border-collapse:collapse; }
 .validated-models-table th,.validated-models-table td { height:34px; box-sizing:border-box; padding:6px 10px; border-bottom:1px solid #e2e8f0; text-align:left; vertical-align:middle; font-size:13px; }

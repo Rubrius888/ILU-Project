@@ -89,10 +89,10 @@ function validateApplicationState(state) {
   if (state.placementFactTrackingStartedAt !== undefined &&
       state.placementFactTrackingStartedAt !== null &&
       typeof state.placementFactTrackingStartedAt !== 'string') {
-    errors.push('placementFactTrackingStartedAt должен быть строкой или null');
+    throw new Error('placementFactTrackingStartedAt должен быть строкой или null');
   }
   if (state.placementFactCompleteDates !== undefined && !Array.isArray(state.placementFactCompleteDates)) {
-    errors.push('placementFactCompleteDates должен быть массивом');
+    throw new Error('placementFactCompleteDates должен быть массивом');
   }
 
   if (

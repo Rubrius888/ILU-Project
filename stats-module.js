@@ -1329,8 +1329,13 @@ function calculateRotationPerformance() {
       (row || []).slice(1).forEach((operator, dayIndex) => {
         const name = String(operator || '').trim();
         if (!name || name === '+' || name.startsWith('ДС:') || !eligibleNames.has(name)) return;
+        const historicalIndex = Array.isArray(plan.operators)
+          ? plan.operators.indexOf(name)
+          : -1;
         const currentIndex = operators.indexOf(name);
-        const operatorId = historicalIds?.[currentIndex] || operatorIds?.[currentIndex];
+        const operatorId = historicalIndex >= 0 && historicalIds
+          ? historicalIds[historicalIndex]
+          : (!historicalIds ? operatorIds?.[currentIndex] : null);
         if (historicalEligible && !historicalEligible.has(operatorId)) return;
         if (typeof rotationFactState === 'function' && rotationFactState(name, (plan.posts || posts)[rowIndex], plan.year, plan.month, dayIndex + 1) === 'green') green.add(operatorId || name);
       });
@@ -1498,4 +1503,7 @@ status.textContent = count > 0
   renderPostCoverageChart();
   renderAttendanceRatingChart();
   renderRotationPerformance();
+  if (typeof renderRotationCompliance === 'function') {
+    renderRotationCompliance();
+  }
 }

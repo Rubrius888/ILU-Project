@@ -1,4 +1,3 @@
-
 // ======================== ЛОГИКА ВЗАИМОДЕЙСТВИЯ ========================
 
 function hasStartedCriticalTraining(row, col) {
@@ -158,12 +157,31 @@ function cyclePostStatus(row, col) {
 
       const isCirclePlacement = newVal === '○';
       const pendingProcessAcknowledgements = [];
-      let continuePlacement;
-
-      // Сначала создаём функцию продолжения расстановки.
-      // Это важно: предупреждение может завершиться через return,
-      // но при подтверждении функция уже должна существовать.
-      continuePlacement = () => {
+      if (isCirclePlacement) {
+        const operatorId = operatorIds[col];
+        const postId = postIds[row];
+        const pending = processChanges.filter(change =>
+          change.postId === postId &&
+          !(change.acknowledgements || []).some(item => item.operatorId === operatorId)
+        );
+        if (pending.length) {
+          const details = pending.map(change =>
+            `${formatProcessChangeDate(change.createdAt)} — ${change.text}`
+          ).join('\n');
+          pendingProcessAcknowledgements.push(...pending);
+          showProcessWarningDialog({
+            operator: operators[col],
+            post: posts[row],
+            details,
+            onCancel: () => pendingProcessAcknowledgements.splice(0),
+            onConfirm: () => {
+              if (typeof continuePlacement === 'function') continuePlacement();
+            }
+          });
+          return;
+        }
+      }
+      function continuePlacement() {
       const shouldPromoteIToLcr =
         isCirclePlacement && data[row][col] === 'I';
       const placementSnapshot = isCirclePlacement
@@ -180,6 +198,12 @@ function cyclePostStatus(row, col) {
             trainingRecords: Array.isArray(trainingRecords)
               ? trainingRecords.slice()
               : trainingRecords,
+            processAcknowledgements: pendingProcessAcknowledgements.map(change => ({
+              id: change.id,
+              acknowledgements: Array.isArray(change.acknowledgements)
+                ? change.acknowledgements.map(item => ({ ...item }))
+                : change.acknowledgements
+            })),
             placementLog: Array.isArray(placementLog)
               ? placementLog.slice()
               : placementLog,
@@ -208,6 +232,16 @@ function cyclePostStatus(row, col) {
         )
           ? placementSnapshot.trainingRecords.slice()
           : placementSnapshot.trainingRecords;
+        if (Array.isArray(placementSnapshot.processAcknowledgements)) {
+          placementSnapshot.processAcknowledgements.forEach(snapshotChange => {
+            const change = processChanges.find(item => item.id === snapshotChange.id);
+            if (change) {
+              change.acknowledgements = Array.isArray(snapshotChange.acknowledgements)
+                ? snapshotChange.acknowledgements.map(item => ({ ...item }))
+                : snapshotChange.acknowledgements;
+            }
+          });
+        }
         placementLog = Array.isArray(placementSnapshot.placementLog)
           ? placementSnapshot.placementLog.slice()
           : placementSnapshot.placementLog;
@@ -219,7 +253,7 @@ function cyclePostStatus(row, col) {
           renderTrainingTable();
         }
         renderMatrix();
-      };
+      }
 
       if (isActivePlacement(newVal)) {
         const today =
@@ -308,7 +342,6 @@ function cyclePostStatus(row, col) {
                   change.acknowledgements.push({ operatorId, acknowledgedAt });
                 }
               });
-
               // I при подтверждённой постановке становится Lкр.
               if (shouldPromoteIToLcr) {
                 data[row][col] = 'Lкр';
@@ -322,7 +355,11 @@ function cyclePostStatus(row, col) {
               }
 
               renderMatrix();
-              saveState();
+              if (saveState() === false) {
+                restoreCirclePlacement();
+                alert('Не удалось сохранить расстановку. Изменения отменены.');
+                return;
+              }
               if (typeof refreshRotationCalendar === 'function') refreshRotationCalendar();
             },
             onCancel: restoreCirclePlacement
@@ -337,38 +374,6 @@ function cyclePostStatus(row, col) {
         openAutomaticTrainingForm(row, col);
       }
       };
-
-      // Проверяем изменения процесса только после создания
-      // функции continuePlacement.
-      if (isCirclePlacement) {
-        const operatorId = operatorIds[col];
-        const postId = postIds[row];
-        const pending = processChanges.filter(change =>
-          change.postId === postId &&
-          !(change.acknowledgements || []).some(item => item.operatorId === operatorId)
-        );
-
-        if (pending.length) {
-          const details = pending.map(change =>
-            `${formatProcessChangeDate(change.createdAt)} — ${change.text}`
-          ).join('\n');
-
-          pendingProcessAcknowledgements.push(...pending);
-
-          showProcessWarningDialog({
-            operator: operators[col],
-            post: posts[row],
-            details,
-            onCancel: () => pendingProcessAcknowledgements.splice(0),
-            onConfirm: () => {
-              if (typeof continuePlacement === 'function') continuePlacement();
-            }
-          });
-
-          return;
-        }
-      }
-
       continuePlacement();
     }
   );
@@ -388,13 +393,11 @@ function cycleLevel(row, col) {
     { value: 'L', label: 'L — Опытный' },
     { value: 'U', label: 'U — Мастер-форматор' }
   ];
-
   // U доступен только НУ, СО и Ф
   const options = allOptions.filter(opt => {
     if (opt.value === 'U' && role !== 'НУ' && role !== 'СО' && role !== 'Ф') return false;
     return true;
   });
-
   showInlineSelect(td, cur, options, (newVal) => {
     if (
       (newVal === 'Iкр' || newVal === 'Lкр') &&
@@ -463,7 +466,6 @@ function cycleOperatorAttendance(idx) {
     operatorRoles[idx] === 'НУ' ||
     operatorRoles[idx] === 'ДС'
   ) return;
-
   const cur = operatorAttendance[idx];
   const options = [
     { value: 'Я', label: 'Явка' },
@@ -473,15 +475,12 @@ function cycleOperatorAttendance(idx) {
     { value: 'С', label: 'В другом секторе' },
     { value: 'У', label: 'Увольнение' }
   ];
-
   showCenteredSelect('Статус явки', cur, options, (newVal) => {
     operatorAttendance[idx] = newVal;
-
     // Если не явка — снимаем оператора со всех постов
     if (newVal !== 'Я') {
       for (let r = 0; r < posts.length; r++) attendanceData[r][idx] = '';
     }
-
     renderMatrix();
   });
 }
@@ -496,7 +495,6 @@ function cycleOperatorRole(idx) {
     { value: 'Ф', label: 'Ф — Форматор' },
     { value: 'ДС', label: 'ДС — Оператор из другого сектора' }
   ];
-
   showCenteredSelect('Должность', cur, options, (newVal) => {
     operatorRoles[idx] = newVal;
 
@@ -516,14 +514,12 @@ function cycleOperatorRole(idx) {
 function cycleErgonomics(row) {
   const td = document.querySelector(`#iluTable tbody tr:nth-child(${row + 1}) td:nth-child(3)`);
   if (!td) return;
-
   const cur = ergonomics[row];
   const options = [
     { value: 'red', label: 'К — Красная' },
     { value: 'yellow', label: 'Ж — Жёлтая' },
     { value: 'green', label: 'З — Зелёная' }
   ];
-
   showInlineSelect(td, cur, options, (newVal) => {
     ergonomics[row] = newVal;
     renderMatrix();
@@ -534,7 +530,6 @@ function cycleErgonomics(row) {
 function cycleTrainingDays(row) {
   const cur = trainingDays[row];
   const newVal = prompt('Введите срок обучения (дни):', cur);
-
   if (newVal !== null && newVal.trim() !== '' && !isNaN(newVal) && parseInt(newVal) > 0) {
     trainingDays[row] = parseInt(newVal);
     renderMatrix();
@@ -545,14 +540,12 @@ function cycleTrainingDays(row) {
 function cycleDifficulty(row) {
   const td = document.querySelector(`#iluTable tbody tr:nth-child(${row + 1}) td:nth-child(2)`);
   if (!td) return;
-
   const cur = difficulty[row];
   const options = [
     { value: 'A', label: 'A — Сложный' },
     { value: 'B', label: 'B — Средний' },
     { value: 'C', label: 'C — Лёгкий' }
   ];
-
   showInlineSelect(td, cur, options, (newVal) => {
     difficulty[row] = newVal;
     renderMatrix();
@@ -563,18 +556,15 @@ function cycleDifficulty(row) {
 function addOperator() {
   const name = prompt('Введите фамилию оператора:');
   if (!name || name.trim() === '') return;
-
   operators.push(name.trim());
   operatorIds.push(createStableId('operator'));
   operatorAttendance.push('Я');
   operatorRoles.push('О');
-
   // Расширяем матрицы
   for (let r = 0; r < posts.length; r++) {
     data[r].push(null);
     attendanceData[r].push('');
   }
-
   renderMatrix();
 }
 
@@ -582,7 +572,6 @@ function addOperator() {
 function addPost() {
   const name = prompt('Введите название поста:');
   if (!name || name.trim() === '') return;
-
   posts.push(name.trim());
   postIds.push(createStableId('post'));
   data.push(new Array(operators.length).fill(null));
@@ -590,7 +579,6 @@ function addPost() {
   difficulty.push('C');
   ergonomics.push('green');
   trainingDays.push(5); // по умолчанию 5 дней
-
   renderMatrix();
 }
 
@@ -662,8 +650,7 @@ function moveOperator(index, direction) {
   const validIndex = Number.isInteger(index) &&
     Number.isInteger(targetIndex) &&
     index >= 0 && targetIndex >= 0 &&
-    index < postCount && targetIndex < postCount &&
-    targetIndex < operatorCount;
+    index < operatorCount && targetIndex < operatorCount;
 
   const validStructure =
     Array.isArray(operatorAttendance) &&
@@ -714,50 +701,39 @@ function moveOperator(index, direction) {
 // Удаление оператора
 function deleteOperator(name) {
   if (!confirm(`Удалить оператора «${name}»?`)) return;
-
   const idx = operators.indexOf(name);
   if (idx === -1) return;
-
   const removedOperatorId = operatorIds[idx];
   operators.splice(idx, 1);
   operatorIds.splice(idx, 1);
-
   Object.keys(validatedCarModels).forEach(key => {
     if (key.startsWith(`${removedOperatorId}|`)) delete validatedCarModels[key];
   });
-
   operatorAttendance.splice(idx, 1);
   operatorRoles.splice(idx, 1);
-
   for (let r = 0; r < posts.length; r++) {
     data[r].splice(idx, 1);
     attendanceData[r].splice(idx, 1);
   }
-
   renderMatrix();
 }
 
 // Удаление поста
 function deletePost(name) {
   if (!confirm(`Удалить пост «${name}»?`)) return;
-
   const idx = posts.indexOf(name);
   if (idx === -1) return;
-
   const removedPostId = postIds[idx];
   posts.splice(idx, 1);
   postIds.splice(idx, 1);
-
   Object.keys(validatedCarModels).forEach(key => {
     if (key.endsWith(`|${removedPostId}`)) delete validatedCarModels[key];
   });
-
   data.splice(idx, 1);
   attendanceData.splice(idx, 1);
   difficulty.splice(idx, 1);
   ergonomics.splice(idx, 1);
   trainingDays.splice(idx, 1);
-
   renderMatrix();
 }
 
@@ -765,9 +741,7 @@ function deletePost(name) {
 function editOperator(oldName) {
   const idx = operators.indexOf(oldName);
   if (idx === -1) return;
-
   const newName = prompt('Введите новую фамилию оператора:', oldName);
-
   if (newName && newName.trim() !== '' && newName.trim() !== oldName) {
     operators[idx] = newName.trim();
     renderMatrix();
@@ -778,9 +752,7 @@ function editOperator(oldName) {
 function editPost(oldName) {
   const idx = posts.indexOf(oldName);
   if (idx === -1) return;
-
   const newName = prompt('Введите новое название поста:', oldName);
-
   if (newName && newName.trim() !== '' && newName.trim() !== oldName) {
     posts[idx] = newName.trim();
     renderMatrix();

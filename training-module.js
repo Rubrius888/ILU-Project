@@ -1474,37 +1474,37 @@ function renderTrainingTable() {
           <td>${r.month}</td>
           <td>${r.startWeek}</td>
           <td>${r.endWeek}</td>
-          <td>${r.post}</td>
-          <td>${r.op}</td>
-          <td>${r.level}</td>
+          <td>${escapeHtml(r.post)}</td>
+          <td>${escapeHtml(r.op)}</td>
+          <td>${escapeHtml(r.level)}</td>
 
           <td
             style="cursor:pointer;color:#2563eb;"
             onclick="editTrainingField(${i}, 'status')"
           >
-            ${r.status}
+            ${escapeHtml(r.status)}
           </td>
 
           <td>${modelChecks}</td>
 
-          <td>${r.formator}</td>
+          <td>${escapeHtml(r.formator)}</td>
 
-          <td>${r.startDate}</td>
+          <td>${escapeHtml(r.startDate)}</td>
 
           <td
             style="cursor:pointer;color:#2563eb;"
             onclick="editTrainingField(${i}, 'validDate')"
           >
-            ${r.validDate}
+            ${escapeHtml(r.validDate)}
           </td>
 
-          <td>${r.duration}</td>
+          <td>${escapeHtml(r.duration)}</td>
 
           <td
             style="cursor:pointer;color:#2563eb;"
             onclick="editTrainingField(${i}, 'comment')"
           >
-            ${r.comment}
+            ${escapeHtml(r.comment)}
           </td>
 
           <td>

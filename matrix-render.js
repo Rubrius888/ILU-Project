@@ -295,12 +295,12 @@ function renderMatrix() {
         ? 'background:#e2e8f0;'
         : '';
 
-    tr.innerHTML = `
+      tr.innerHTML = `
       <td
         style="cursor:pointer;${postBackground}"
-        onclick="showPostMenu(event, '${postName}', ${r})"
-      >${postName}</td>
+      >${escapeHtml(postName)}</td>
     `;
+    tr.firstElementChild.onclick = event => showPostMenu(event, postName, r);
 
     // ----- СЛОЖНОСТЬ -----
 

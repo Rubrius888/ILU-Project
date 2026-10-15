@@ -1665,7 +1665,7 @@ function generateRotationPlan() {
       const cell = schedule[d][r];
       const op = cell?.operator || '';
       const executionClass = op && typeof isRotationApproved === 'function' && isRotationApproved(year, month)
-        ? ` rotation-fact-${rotationFactState(op, posts[r], year, month, d + 1)}`
+        ? ` rotation-fact-${rotationFactState(op, posts[r], year, month, d + 1, { operators, operatorIds, posts, postIds })}`
         : '';
       const reserveAttrs = cell?.reserve ? ' data-reserve="true"' : '';
       const reserveStyle = cell?.reserve ? 'color:#7c3aed;font-weight:600;' : '';
