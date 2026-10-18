@@ -1567,17 +1567,22 @@ function openValidationFilter(kind, anchor) {
   const existing = document.querySelector('.validation-filter-menu');
   if (existing && existing.__kind === kind) { closeValidationFilterMenu(); return; }
   closeValidationFilterMenu();
-  const values = kind === 'operator' ? operators.filter(Boolean) : posts.filter(Boolean);
-  const selected = (kind === 'operator' ? window.validationOperatorFilter : window.validationPostFilter) || new Set(values);
+  const values = [...new Set(kind === 'operator' ? operators.filter(Boolean) : posts.filter(Boolean))];
+  const selected = new Set((kind === 'operator' ? window.validationOperatorFilter : window.validationPostFilter) || values);
   const menu = document.createElement('div'); menu.className = 'validation-filter-menu';
   menu.innerHTML = `<input class="validation-filter-search" placeholder="Поиск…"><div class="validation-filter-actions"><button type="button" data-action="all">Выбрать всех</button><button type="button" data-action="none">Снять все</button></div><div class="validation-filter-options"></div><div class="validation-filter-footer"><button type="button" data-action="reset">Сбросить</button><button type="button" data-action="apply">Применить</button></div>`;
   const options = menu.querySelector('.validation-filter-options');
   const draw = query => { options.innerHTML = values.filter(v => v.toLowerCase().includes(query.toLowerCase())).map(v => `<label><input type="checkbox" value="${escapeHtml(v)}" ${selected.has(v) ? 'checked' : ''}> ${escapeHtml(v)}</label>`).join(''); };
   draw(''); menu.querySelector('.validation-filter-search').oninput = e => draw(e.target.value);
+  options.addEventListener('change', event => {
+    const input = event.target;
+    if (!input.matches('input[type="checkbox"]')) return;
+    if (input.checked) selected.add(input.value); else selected.delete(input.value);
+  });
   menu.querySelector('[data-action="all"]').onclick = () => { values.forEach(v => selected.add(v)); draw(menu.querySelector('.validation-filter-search').value); };
   menu.querySelector('[data-action="none"]').onclick = () => { selected.clear(); draw(menu.querySelector('.validation-filter-search').value); };
-  menu.querySelector('[data-action="reset"]').onclick = () => { if (kind === 'operator') delete window.validationOperatorFilter; else delete window.validationPostFilter; menu.remove(); renderValidatedModelsTable(); };
-  menu.querySelector('[data-action="apply"]').onclick = () => { const next = new Set([...options.querySelectorAll('input:checked')].map(input => input.value)); if (kind === 'operator') window.validationOperatorFilter = next; else window.validationPostFilter = next; menu.remove(); renderValidatedModelsTable(); };
+  menu.querySelector('[data-action="reset"]').onclick = () => { if (kind === 'operator') delete window.validationOperatorFilter; else delete window.validationPostFilter; closeValidationFilterMenu(); renderValidatedModelsTable(); };
+  menu.querySelector('[data-action="apply"]').onclick = () => { const next = new Set(selected); if (kind === 'operator') window.validationOperatorFilter = next; else window.validationPostFilter = next; closeValidationFilterMenu(); renderValidatedModelsTable(); };
   menu.__kind = kind;
   document.body.appendChild(menu);
   const reposition = () => {

@@ -33,6 +33,18 @@ function getRotationSnapshot(year, month) {
   return savedPlans.rotationHistory?.[planMonthKey(year, month)] || null;
 }
 
+// Единая точка выбора плана для календаря и рекомендаций. Старый одиночный
+// plan.rotation допустим только если его дата совпадает с запрошенным месяцем.
+function getApplicableRotationPlan(year, month) {
+  return getRotationSnapshot(year, month) || (
+    savedPlans.rotation &&
+    Number(savedPlans.rotation.year) === Number(year) &&
+    Number(savedPlans.rotation.month) === Number(month)
+      ? savedPlans.rotation
+      : null
+  );
+}
+
 function getRotationApproval(year, month) {
   return rotationApprovals?.[planMonthKey(year, month)] || null;
 }
@@ -632,7 +644,7 @@ function restorePlan(type, tableId, color, explicitPlan = null) {
     plan = plan || getDevelopmentSnapshot(date.getFullYear(), date.getMonth());
   } else if (type === 'rotation') {
     const date = getRotationViewDate();
-    plan = plan || getRotationSnapshot(date.getFullYear(), date.getMonth()) || savedPlans.rotation;
+    plan = plan || getApplicableRotationPlan(date.getFullYear(), date.getMonth());
   } else {
     plan = plan || savedPlans[type];
   }
@@ -838,7 +850,7 @@ function updateRotationMonthLabel() {
 // Обновляет только открытый календарь ротации после изменения состояния.
 function refreshRotationCalendar() {
   const date = getRotationViewDate();
-  const plan = getRotationSnapshot(date.getFullYear(), date.getMonth());
+  const plan = getApplicableRotationPlan(date.getFullYear(), date.getMonth());
   if (plan) restorePlan('rotation', 'rotCalendarTable', '#16a34a', plan);
   else showMissingRotationPlan(date.getFullYear(), date.getMonth());
   renderRotationApprovalControl();
@@ -867,7 +879,7 @@ function scheduleRotationFactRefresh() {
 function setRotationPlanMonth(year, month) {
   window.rotationPlanViewDate = new Date(year, month, 1);
   updateRotationMonthLabel();
-  const plan = getRotationSnapshot(year, month);
+  const plan = getApplicableRotationPlan(year, month);
   if (plan) restorePlan('rotation', 'rotCalendarTable', '#16a34a', plan);
   else showMissingRotationPlan(year, month);
   renderRotationApprovalControl();
@@ -1345,7 +1357,7 @@ function openRotationPlacementAssistant() {
   const old = document.getElementById('rotationPlacementAssistant');
   if (old) { old.remove(); return; }
   const now = new Date();
-  const snapshot = getRotationSnapshot(now.getFullYear(), now.getMonth());
+  const snapshot = getApplicableRotationPlan(now.getFullYear(), now.getMonth());
   const overlay = document.createElement('div');
   overlay.id = 'rotationPlacementAssistant';
   overlay.className = 'rotation-assistant-overlay';
@@ -1371,6 +1383,20 @@ function openRotationPlacementAssistant() {
     const list = document.createElement('div'); list.className = 'rotation-assistant-list';
     const counts = { 'Выполнено': 0, 'Ожидает выполнения': 0, 'Несоответствие': 0, 'Требует проверки': 0 };
     const chains = getActiveRotationChains(snapshot, now);
+    const participants = chains.flatMap(chain => chain.participants || []);
+    // Старые/календарные snapshots могут содержать назначения только в rows,
+    // без цепочек. Календарь уже отображает эти строки, поэтому рекомендации
+    // должны использовать тот же источник для выбранного дня.
+    if (!participants.length && Array.isArray(snapshot.rows)) {
+      const dayColumn = now.getDate();
+      snapshot.rows.forEach(row => {
+        const post = row?.[0];
+        const operator = row?.[dayColumn];
+        if (post && operator && operator !== '+') {
+          participants.push({ operator, fromPost: null, toPost: post });
+        }
+      });
+    }
     const currentPost = name => {
       const historicalIndex = Array.isArray(snapshot.operators)
         ? snapshot.operators.indexOf(name) : -1;
@@ -1383,10 +1409,10 @@ function openRotationPlacementAssistant() {
       const index = matches[0].index;
       return { post: posts.find((post, row) => attendanceData?.[row]?.[index] === '○') || null, uncertain: false };
     };
-    chains.flatMap(chain => chain.participants || []).forEach(participant => {
+    participants.forEach(participant => {
       const currentInfo = currentPost(participant.operator);
       const current = currentInfo.post;
-      const status = currentInfo.uncertain ? 'Требует проверки' : current === participant.toPost ? 'Выполнено' : current === participant.fromPost ? 'Ожидает выполнения' : 'Несоответствие';
+      const status = currentInfo.uncertain ? 'Требует проверки' : current === participant.toPost ? 'Выполнено' : participant.fromPost && current === participant.fromPost ? 'Ожидает выполнения' : 'Несоответствие';
       counts[status] = (counts[status] || 0) + 1;
       const row = document.createElement('article'); row.className = 'rotation-assistant-item';
       const top = document.createElement('div'); top.className = 'rotation-assistant-item-top';
