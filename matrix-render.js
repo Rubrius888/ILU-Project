@@ -884,6 +884,12 @@ function renderMatrix() {
   updateStatsCard();
   saveState();
 
+  // Таблица A1/M3 выводит пары пост–оператор по актуальным уровням data.
+  // Перерисовка не изменяет сохранённые подтверждения моделей и фильтры.
+  if (typeof renderValidatedModelsTable === 'function') {
+    renderValidatedModelsTable();
+  }
+
 }
 
 function setupMatrixHoverHighlight() {

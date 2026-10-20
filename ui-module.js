@@ -586,6 +586,10 @@ function openTab(event, id) {
     selectedTab.classList.add('active');
   }
 
+  if (id === 'training' && typeof renderValidatedModelsTable === 'function') {
+    renderValidatedModelsTable();
+  }
+
   if (
     id === 'stats' &&
     typeof renderStatsDashboard === 'function'
