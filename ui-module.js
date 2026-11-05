@@ -609,17 +609,13 @@ function updateDateBar() {
     { month: 'long' }
   );
 
-  const startOfYear =
-    new Date(now.getFullYear(), 0, 1);
-
-  const days = Math.floor(
-    (now - startOfYear) /
-    (1000 * 60 * 60 * 24)
-  );
-
-  const weekNumber = Math.ceil(
-    (days + startOfYear.getDay() + 1) / 7
-  );
+  // ISO 8601: неделя определяется четвергом, понедельник — первый день.
+  // UTC здесь используется только для арифметики локальных календарных дат,
+  // чтобы переход на летнее время не менял длительность суток.
+  const isoDate = new Date(Date.UTC(year, now.getMonth(), now.getDate()));
+  isoDate.setUTCDate(isoDate.getUTCDate() + 4 - (isoDate.getUTCDay() || 7));
+  const isoYearStart = new Date(Date.UTC(isoDate.getUTCFullYear(), 0, 1));
+  const weekNumber = Math.ceil(((isoDate - isoYearStart) / 86400000 + 1) / 7);
 
   const dateString = now.toLocaleString(
     'ru-RU',
@@ -635,6 +631,29 @@ function updateDateBar() {
     `<div>📅 Месяц: <span>${month}</span></div>` +
     `<div>📅 Неделя: <span>№${weekNumber}</span></div>` +
     `<div>📅 Дата: <span>${dateString}</span></div>`;
+}
+
+// Один таймер и один комплект обработчиков на всё время жизни страницы.
+let dateBarTimer = null;
+let dateBarRefreshStarted = false;
+
+function refreshDateBarAndSchedule() {
+  if (dateBarTimer !== null) clearTimeout(dateBarTimer);
+  updateDateBar();
+  const now = new Date();
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  dateBarTimer = setTimeout(refreshDateBarAndSchedule, Math.max(1, midnight - now));
+}
+
+function startDateBarRefresh() {
+  if (dateBarRefreshStarted) return;
+  dateBarRefreshStarted = true;
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) refreshDateBarAndSchedule();
+  });
+  window.addEventListener('focus', refreshDateBarAndSchedule);
+  window.addEventListener('pageshow', refreshDateBarAndSchedule);
+  refreshDateBarAndSchedule();
 }
 
 // ======================== ИНФОРМАЦИОННЫЕ КАРТОЧКИ ========================

@@ -1342,7 +1342,16 @@ function calculateRotationPerformance() {
     });
     // Старые snapshots не содержат исторический состав участка. Не подменяем
     // его текущим списком операторов: для таких месяцев знаменатель неизвестен.
-    const denominator = historicalEligible ? historicalEligible.size : (key === currentKey ? total : null);
+    // Legacy snapshots may not contain operatorRoles. Their own operator list
+    // still provides the historical denominator; filter it by current roles only
+    // for excluding НУ/СО/ДС, without replacing the historical plan data.
+    const legacyEligible = historicalEligible || (Array.isArray(plan.operators)
+      ? new Set(plan.operators.filter(name => {
+          const index = operators.indexOf(name);
+          return index >= 0 && !new Set(['НУ', 'СО', 'ДС']).has(operatorRoles?.[index]);
+        }).map(name => operatorIds?.[operators.indexOf(name)] || name))
+      : null);
+    const denominator = legacyEligible ? legacyEligible.size : (key === currentKey ? total : null);
     const label = new Date(plan.year, plan.month, 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
     points.push({ key, label, count: green.size, operators: [...green], total: denominator, percent: denominator ? (green.size / denominator) * 100 : null });
   });

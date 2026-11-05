@@ -388,28 +388,7 @@ function renderMatrix() {
         `${postName}\n` +
         `${operators[c]}`;
 
-      // Проверяем давность стояния на посту
-      try {
-        const currentLevel = data[r][c];
-
-        if (currentLevel && currentLevel !== '') {
-          const ageColor =
-            getPlacementAgeColor(
-              operators[c],
-              posts[r]
-            );
-
-          if (ageColor === 'red') {
-            tdPost.style.animation =
-              'blink-red 1s infinite';
-          } else if (ageColor === 'yellow') {
-            tdPost.style.animation =
-              'blink-yellow 1s infinite';
-          }
-        }
-      } catch (error) {
-        // Ничего не делаем
-      }
+      // Давность практической работы больше не визуализируется в матрице.
 
       tdPost.onclick = () => cyclePostStatus(r, c);
       tr.appendChild(tdPost);

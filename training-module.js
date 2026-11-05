@@ -1,5 +1,11 @@
 const MANUAL_TRAINING_LEVELS = ['Iкр', 'Lкр'];
 
+function canOperatorTrainAtPost(operatorIndex, postIndex) {
+  const level = data[postIndex]?.[operatorIndex];
+  if (!['U', 'L'].includes(level)) return false;
+  return level === 'U' || operatorRoles[operatorIndex] === 'Ф' || operatorRoles[operatorIndex] === 'СО';
+}
+
 function formatDateForInput(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -192,7 +198,7 @@ function openTrainingRecordForm(options = {}) {
   applyFieldStyle(statusSelect);
 
   const formatorLabel = createLabel(
-    'Форматор с уровнем U на выбранном посту'
+    'Обучающий (форматор / старший оператор)'
   );
 
   const formatorSelect = document.createElement('select');
@@ -299,7 +305,7 @@ function openTrainingRecordForm(options = {}) {
 
       if (
         operatorRoles[index] !== 'ДС' &&
-        data[postIndex]?.[index] === 'U'
+        canOperatorTrainAtPost(index, postIndex)
       ) {
         formatorIndexes.push(index);
 
@@ -314,17 +320,17 @@ function openTrainingRecordForm(options = {}) {
 
     if (formatorIndexes.length === 0) {
       emptyOption.textContent =
-        'Нет операторов с уровнем U';
+        'Нет доступных форматоров';
 
       formatorSelect.disabled = true;
 
       formatorHint.textContent =
-        'На выбранном посту нет операторов с уровнем U.';
+        'На выбранном посту нет операторов с правом обучения.';
     } else {
       formatorSelect.disabled = false;
 
       formatorHint.textContent =
-        'Показаны только операторы с уровнем U на выбранном посту.';
+        'Показаны форматоры и старшие операторы с уровнем U/L, а также обычные операторы с уровнем U.';
     }
   }
 
@@ -486,10 +492,19 @@ function openTrainingRecordForm(options = {}) {
     const selectedPost =
       posts[postIndex];
 
-    const formator = formatorSelect.value
-      ? operators[
-          parseInt(formatorSelect.value, 10)
-        ]
+    const formatorIndex = formatorSelect.value
+      ? parseInt(formatorSelect.value, 10)
+      : null;
+
+    if (formatorIndex !== null &&
+        !canOperatorTrainAtPost(formatorIndex, postIndex)) {
+      alert('Выбранный обучающий больше не имеет права обучать на этом посту.');
+      updateFormatorList();
+      return;
+    }
+
+    const formator = formatorIndex !== null
+      ? operators[formatorIndex]
       : '—';
 
     const startDateObject = new Date(
@@ -665,7 +680,7 @@ function createAutomaticLcrTrainingRecord(row, col) {
     if (
       index !== col &&
       operatorRoles[index] !== 'ДС' &&
-      data[row]?.[index] === 'U'
+      canOperatorTrainAtPost(index, row)
     ) {
       formator = operators[index];
       break;
@@ -1308,6 +1323,32 @@ function openTrainingFilterMenu(event, type) {
   }, 0);
 }
 
+let trainingCommentsMigrated = false;
+function migrateTrainingComments() {
+  if (trainingCommentsMigrated) return;
+  let changed = false;
+  (trainingRecords || []).forEach(record => {
+    if (record.commentSchemaVersion === 1) return;
+    const legacy = String(record.comment || '').trim();
+    if (record.autoFromMatrix === true && legacy && legacy !== '—') {
+      record.systemComment = record.systemComment || legacy;
+      record.userComment = record.userComment || '';
+    } else {
+      record.userComment = record.userComment ?? (legacy === '—' ? '' : legacy);
+      record.systemComment = record.systemComment || '';
+    }
+    record.comment = record.userComment || '—';
+    record.commentSchemaVersion = 1;
+    changed = true;
+  });
+  trainingCommentsMigrated = true;
+  if (changed && typeof saveState === 'function') saveState();
+}
+function trainingCommentText(record) {
+  const parts = [record.systemComment, record.userComment || (record.comment === '—' ? '' : record.comment)].filter(Boolean);
+  return parts.length ? parts.join('\n') : '—';
+}
+
 function renderTrainingTable() {
   const table = document.querySelector('#trainingTable');
   const tbody = table?.querySelector('tbody');
@@ -1315,6 +1356,7 @@ function renderTrainingTable() {
   if (!table || !tbody) {
     return;
   }
+  migrateTrainingComments();
   renderValidatedModelsTable();
 
   saveState();
@@ -1501,10 +1543,12 @@ function renderTrainingTable() {
           <td>${escapeHtml(r.duration)}</td>
 
           <td
-            style="cursor:pointer;color:#2563eb;"
-            onclick="editTrainingField(${i}, 'comment')"
+            class="training-comment-cell"
+            data-training-comment-index="${i}"
+            style="cursor:pointer;white-space:pre-wrap;"
+            onclick="openTrainingCommentModal(${i})"
           >
-            ${escapeHtml(r.comment)}
+            ${escapeHtml(trainingCommentText(r))}
           </td>
 
           <td>
@@ -1726,6 +1770,34 @@ function showTrainingDateEditor(currentValue, onSave, minimumDate = '') {
   });
   document.addEventListener('keydown', onKeyDown);
   document.body.appendChild(overlay);
+}
+
+function openTrainingCommentModal(index) {
+  const record = trainingRecords[index];
+  if (!record) return;
+  document.querySelector('.training-comment-modal-overlay')?.remove();
+  const overlay = document.createElement('div');
+  overlay.className = 'training-comment-modal-overlay';
+  const modal = document.createElement('div');
+  modal.className = 'training-comment-modal';
+  const title = document.createElement('h2'); title.textContent = 'Комментарий к обучению';
+  const info = document.createElement('div'); info.className = 'training-comment-modal-info';
+  info.innerHTML = '<div><span>Оператор</span><b>' + escapeHtml(record.op || '—') + '</b></div>' +
+    '<div><span>Пост</span><b>' + escapeHtml(record.post || '—') + '</b></div>' +
+    '<div><span>Дата начала обучения</span><b>' + escapeHtml(record.startDate || '—') + '</b></div>';
+  const system = document.createElement('div'); system.className = 'training-comment-system';
+  system.textContent = record.systemComment ? 'Системный комментарий: ' + record.systemComment : 'Системный комментарий отсутствует';
+  const label = document.createElement('label'); label.textContent = 'Комментарий НУ';
+  const input = document.createElement('textarea'); input.className = 'training-comment-modal-input'; input.value = record.userComment ?? (record.comment === '—' ? '' : record.comment || ''); input.placeholder = 'Введите комментарий';
+  const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Отмена'; cancel.className = 'training-comment-cancel';
+  const save = document.createElement('button'); save.type = 'button'; save.textContent = 'Сохранить комментарий'; save.className = 'training-comment-save';
+  const actions = document.createElement('div'); actions.className = 'training-comment-modal-actions'; actions.append(cancel, save);
+  const close = () => overlay.remove();
+  const commit = () => { record.userComment = input.value.trim(); record.comment = record.userComment || '—'; if (typeof saveState === 'function' && saveState() === false) { alert('Не удалось сохранить комментарий.'); return; } close(); renderTrainingTable(); };
+  cancel.onclick = close; save.onclick = commit;
+  overlay.onmousedown = event => { if (event.target === overlay) close(); };
+  input.onkeydown = event => { if (event.key === 'Escape') { event.preventDefault(); close(); } else if (event.key === 'Enter' && event.ctrlKey) { event.preventDefault(); commit(); } };
+  modal.append(title, info, system, label, input, actions); overlay.appendChild(modal); document.body.appendChild(overlay); input.focus();
 }
 
 function editTrainingField(index, field) {

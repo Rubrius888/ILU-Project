@@ -197,7 +197,7 @@ window.printSections = printSections;
 // ======================== ПЕРВИЧНЫЙ ЗАПУСК ========================
 restoreSavedFilters();
 restoreInfoCardsState();
-updateDateBar();
+startDateBarRefresh();
 updateInfoCard();
 if (typeof ensurePrimaryPlacementEvents === 'function') {
   ensurePrimaryPlacementEvents();
