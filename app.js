@@ -84,6 +84,7 @@ function restoreSavedFilters() {
       element.value = savedValue;
     }
   });
+  renderOrganizationFilters();
 }
 
 // ======================== СТАТИСТИКА В КАРТОЧКАХ ========================

@@ -134,69 +134,26 @@ function rotationFactState(operatorName, postName, year, month, day, snapshot = 
   const contextPosts = Array.isArray(context?.posts) ? context.posts : posts;
   const contextOperatorIds = Array.isArray(context?.operatorIds) ? context.operatorIds : (context ? null : operatorIds);
   const contextPostIds = Array.isArray(context?.postIds) ? context.postIds : (context ? null : postIds);
-  const contextOperatorIndex = contextOperators.indexOf(operatorName);
-  const currentOperatorId = operators.filter(item => item === operatorName).length === 1
-    ? operatorIds[operators.indexOf(operatorName)]
-    : null;
-  const hasHistoricalOperatorIds = Array.isArray(context?.operatorIds) && context.operatorIds.length > 0;
-  const historicalNameIsUnique = Array.isArray(context?.operators) &&
-    context.operators.filter(item => item === operatorName).length === 1;
-  const currentNameIsUnique = operators.filter(item => item === operatorName).length === 1;
-  if (context && hasHistoricalOperatorIds && historicalNameIsUnique && currentNameIsUnique &&
-      contextOperatorIds[contextOperatorIndex] !== currentOperatorId) {
-    return 'neutral';
-  }
-  const operatorId = contextOperatorIds?.[contextOperatorIndex] || (
-    context && Array.isArray(context.operators) && !hasHistoricalOperatorIds &&
-    historicalNameIsUnique && currentNameIsUnique && currentOperatorId
-      ? currentOperatorId
-      : null
-  );
-  const contextPostIndex = contextPosts.indexOf(postName);
-  const postId = contextPostIds?.[contextPostIndex] || (
-    context && !Array.isArray(context.postIds) &&
-    posts.filter(item => item === postName).length === 1
-      ? postIds[posts.indexOf(postName)]
-      : null
-  );
-  if (!operatorId || !postId || !Array.isArray(placementFactEvents)) return 'neutral';
-  const startOfDay = new Date(year, month, day, 0, 0, 0, 0).getTime();
-  const endOfDay = new Date(year, month, day + 1, 0, 0, 0, 0).getTime();
-  const now = Date.now();
-  const events = placementFactEvents
-    .filter(event => event.operatorId === operatorId && event.postId === postId)
-    .map(event => ({ ...event, time: Date.parse(event.timestamp) }))
-    .filter(event => Number.isFinite(event.time))
-    .sort((a, b) => a.time - b.time);
-  // Events are paired chronologically. Keep all currently open starts so
-  // repeated confirmed intervals in one production day are not lost.
-  const openStarts = [];
-  for (const event of events) {
-    if (event.eventType === 'start') {
-      openStarts.push(event.time);
-    } else if (event.eventType === 'end' && openStarts.length) {
-      // A normal placement closes the most recent open interval. Older open
-      // intervals are retained for compatibility with legacy/incomplete logs.
-      const openStart = openStarts.pop();
-      if (Math.max(openStart, startOfDay) < Math.min(event.time, endOfDay)) {
-        return 'green';
-      }
+  const operatorIndex = contextOperators.indexOf(operatorName);
+  const postIndex = contextPosts.indexOf(postName);
+  const operatorId = contextOperatorIds?.[operatorIndex] || null;
+  const postId = contextPostIds?.[postIndex] || null;
+  const currentOperatorIsUnique = operators.filter(item => item === operatorName).length === 1;
+  const currentPostIsUnique = posts.filter(item => item === postName).length === 1;
+  const targetDate = String(day).padStart(2, '0') + '.' + String(month + 1).padStart(2, '0') + '.' + String(year);
+  const isoTargetDate = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+  const hasFact = Array.isArray(placementLog) && placementLog.some(entry => {
+    const entryDate = String(entry.date || '').trim();
+    const dateMatches = entryDate === targetDate || entryDate === isoTargetDate;
+    if (!dateMatches) return false;
+    if (operatorId && postId && entry.operatorId && entry.postId) {
+      return entry.operatorId === operatorId && entry.postId === postId;
     }
-  }
-  const currentTime = now;
-  if (openStarts.some(openStart =>
-    Math.max(openStart, startOfDay) < Math.min(currentTime, endOfDay)
-  )) return 'green';
-  // Красный допустим только после завершения локального календарного дня и
-  // если приложение вело непрерывный учёт с его начала. Старые snapshots и
-  // импортированные базы без отметки начала учёта остаются нейтральными.
-  // Красный означает отсутствие подтверждения в журнале после завершения
-  // календарной даты. Это не утверждение о физическом отсутствии оператора;
-  // сведения о полноте учёта сохраняются отдельно только для диагностики.
-  if (now >= endOfDay) {
-    return 'red';
-  }
-  return 'neutral';
+    return currentOperatorIsUnique && currentPostIsUnique &&
+      entry.opName === operatorName && entry.postName === postName;
+  });
+  const endOfDay = new Date(year, month, day + 1, 0, 0, 0, 0).getTime();
+  return hasFact ? 'green' : (Date.now() >= endOfDay ? 'red' : 'neutral');
 }
 
 function getRotationSettings() {

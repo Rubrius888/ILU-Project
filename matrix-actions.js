@@ -19,7 +19,7 @@ function hasStartedCriticalTraining(row, col) {
   );
 }
 
-function recordPlacementFactEvent(row, col, eventType, sourcePlacementId = null) {
+function recordPlacementFactEvent(row, col, eventType, sourcePlacementId = null, eventTimestamp = null) {
   const operatorId = operatorIds[col];
   const postId = postIds[row];
   if (!operatorId || !postId) return;
@@ -31,7 +31,7 @@ function recordPlacementFactEvent(row, col, eventType, sourcePlacementId = null)
     operatorId,
     postId,
     eventType,
-    timestamp: new Date().toISOString(),
+    timestamp: eventTimestamp || new Date().toISOString(),
     sourcePlacementId
   });
 }

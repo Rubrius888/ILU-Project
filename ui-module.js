@@ -727,6 +727,55 @@ function restoreInfoCardsState() {
 
 // ======================== СИНХРОНИЗАЦИЯ ФИЛЬТРОВ ========================
 
+function getOrganizationDepartment(name) {
+  return organizationStructure.find(item => item.name === name) || organizationStructure[0];
+}
+
+function normalizeOrganizationSelection() {
+  if (filterState.workshop === 'Цех сборки салона' ||
+      filterState.workshop === 'Цех сборки механики') {
+    filterState.workshop = 'Цех Сборки Салона и Механики';
+  }
+  if (filterState.section === 'Участок сборки механики 3' ||
+      filterState.section === 'Участок сборки механики 5') {
+    // Только перенос выбранного фильтра. Производственные записи не объединяются.
+    filterState.section = 'Участок сборки механики 3 и механики 5';
+  }
+}
+
+function renderOrganizationFilters() {
+  const dep = document.getElementById('filterDepartment');
+  const shop = document.getElementById('filterWorkshop');
+  const section = document.getElementById('filterSection');
+  if (!dep || !shop || !section) return;
+  normalizeOrganizationSelection();
+  const department = getOrganizationDepartment(filterState.department);
+  filterState.department = department.name;
+  dep.replaceChildren(...organizationStructure.map(x => new Option(x.name, x.name)));
+  dep.value = department.name;
+  const workshop = department.workshops.find(x => x.name === filterState.workshop) || department.workshops[0] || null;
+  filterState.workshop = workshop ? workshop.name : '';
+  shop.replaceChildren(...department.workshops.map(x => new Option(x.name, x.name)));
+  if (workshop) shop.value = workshop.name;
+  const sectionList = workshop ? workshop.sections : [];
+  const selectedSection = sectionList.find(x => x.name === filterState.section) || sectionList[0] || null;
+  filterState.section = selectedSection ? selectedSection.name : '';
+  section.replaceChildren(...sectionList.map(x => new Option(x.name, x.name)));
+  if (selectedSection) section.value = selectedSection.name;
+}
+
+function onDepartmentChanged() {
+  filterState.department = document.getElementById('filterDepartment').value;
+  renderOrganizationFilters();
+  updateInfoCard();
+}
+
+function onWorkshopChanged() {
+  filterState.workshop = document.getElementById('filterWorkshop').value;
+  renderOrganizationFilters();
+  updateInfoCard();
+}
+
 function updateInfoCard() {
   const department =
     document.getElementById('filterDepartment').value;
@@ -766,18 +815,20 @@ function updateInfoCard() {
   saveState();
 }
 
+renderOrganizationFilters();
+
 document
   .getElementById('filterDepartment')
   .addEventListener(
     'change',
-    updateInfoCard
+    onDepartmentChanged
   );
 
 document
   .getElementById('filterWorkshop')
   .addEventListener(
     'change',
-    updateInfoCard
+    onWorkshopChanged
   );
 
 document

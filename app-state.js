@@ -506,12 +506,43 @@ let workshopChief = '';
 let sectionChief = '';
 
 // Вызов данных департамента, цеха, участка и смены
+// Shared UI state and the authoritative organisational hierarchy.
+// Values are kept as labels for backwards compatibility with saved backups;
+// stable ids provide unambiguous parent/child relationships.
 let filterState = {
-  department: '',
-  workshop: '',
-  section: '',
-  shift: ''
+  department: 'Сборка',
+  workshop: 'Цех сборки салона',
+  section: 'Участок сборки салона 2',
+  shift: 'A'
 };
+
+const organizationStructure = [
+  { id: 'assembly', name: 'Сборка', workshops: [
+    { id: 'assembly-salon-mechanics', name: 'Цех Сборки Салона и Механики', sections: [
+      { id: 'assembly-salon-2', name: 'Участок сборки салона 2' },
+      { id: 'assembly-salon-4', name: 'Участок сборки салона 4' },
+      { id: 'assembly-mechanics-1', name: 'Участок сборки механики 1' },
+      { id: 'assembly-salon-8', name: 'Участок сборки салона 8' }
+    ] },
+    { id: 'assembly-sector-2', name: 'Цех Сектор 2', sections: [
+      { id: 'assembly-doors', name: 'Участок сборки дверей' },
+      { id: 'assembly-mechanics-3-5', name: 'Участок сборки механики 3 и механики 5' },
+      { id: 'assembly-seats', name: 'Участок сборки сидений' }
+    ] },
+    { id: 'assembly-large-units', name: 'Цех Крупноузловой сборки', sections: [
+      { id: 'assembly-preliminary', name: 'Участок предварительной сборки' },
+      { id: 'assembly-large-unit', name: 'Участок крупноузловой сборки' }
+    ] },
+    { id: 'assembly-repairs', name: 'Цех Ремонтов', sections: [
+      { id: 'repair-bdmo', name: 'Участок BDMO' },
+      { id: 'repair-blan', name: 'Участок BLAN' },
+      { id: 'repair-metro', name: 'Участок METRO' }
+    ] }
+  ] },
+  { id: 'paint', name: 'Окраска', workshops: [] },
+  { id: 'welding', name: 'Сварка', workshops: [] }
+];
+
 
 // Контекстное меню
 let currentMenu = null;

@@ -176,17 +176,20 @@ function ensureDailyInitialPlacement() {
     ? placementLog.slice()
     : placementLog;
   const previousInitialPlacementDate = placementInitialPlacementDate;
+  const previousFactEvents = Array.isArray(placementFactEvents) ? placementFactEvents.slice() : placementFactEvents;
   const persistOrRollback = (successValue) => {
     try {
       if (saveState() === false) {
         placementLog = previousPlacementLog;
         placementInitialPlacementDate = previousInitialPlacementDate;
+        placementFactEvents = previousFactEvents;
         return false;
       }
       return successValue;
     } catch (error) {
       placementLog = previousPlacementLog;
       placementInitialPlacementDate = previousInitialPlacementDate;
+      placementFactEvents = previousFactEvents;
       console.error('Не удалось сохранить первичную расстановку:', error);
       return false;
     }
@@ -228,17 +231,27 @@ function ensureDailyInitialPlacement() {
   }
 
   assignments.forEach(({ opName, postName, status }) => {
-    placementLog.push({
-      id: createPlacementId(),
-      date: today,
-      time: '06:45',
-      opName,
-      postName,
-      status,
-      reason: 'Первичная расстановка',
-      reasonText: '',
-      comment: ''
-    });
+    const entry = {
+      id: createPlacementId(), date: today, time: '06:45', opName, postName, status,
+      operatorId: operatorIds[operators.indexOf(opName)] || null,
+      postId: postIds[posts.indexOf(postName)] || null,
+      reason: 'Первичная расстановка', reasonText: '', comment: ''
+    };
+    placementLog.push(entry);
+    const operatorIndex = operators.indexOf(opName);
+    const postIndex = posts.indexOf(postName);
+    if (operatorIndex >= 0 && postIndex >= 0 && typeof recordPlacementFactEvent === 'function') {
+      const hasOpenInterval = (placementFactEvents || []).filter(event =>
+        event.operatorId === entry.operatorId && event.postId === entry.postId
+      ).sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))
+        .reduce((open, event) => event.eventType === 'start' ? open + 1 : Math.max(0, open - 1), 0) > 0;
+      if (!hasOpenInterval) {
+        const [day, month, year] = today.split('.').map(Number);
+        const [hour, minute] = entry.time.split(':').map(Number);
+        const timestamp = new Date(year, month - 1, day, hour, minute, 0, 0).toISOString();
+        recordPlacementFactEvent(postIndex, operatorIndex, 'start', entry.id, timestamp);
+      }
+    }
   });
 
   placementInitialPlacementDate = today;
