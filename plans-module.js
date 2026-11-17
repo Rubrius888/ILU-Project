@@ -383,10 +383,11 @@ function generateDevelopmentPlan() {
           const qualification = qualificationPriority(b.level) - qualificationPriority(a.level);
           if (qualification) return qualification;
           if (a.free !== b.free) return a.free ? -1 : 1;
+          const coverageDiff = virtualCoverage[a.post.index] - virtualCoverage[b.post.index];
+          if (coverageDiff) return coverageDiff;
           const rarity = a.rarity - b.rarity;
           if (rarity) return rarity;
-          const coverageDiff = virtualCoverage[a.post.index] - virtualCoverage[b.post.index];
-          return coverageDiff || a.post.index - b.post.index;
+          return a.post.index - b.post.index;
         });
         const option = options[0];
         diagnosticEvent({ type: 'operator_selected', targetLevel, operator: selected.op.name, post: option.post.name });

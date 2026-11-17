@@ -1591,30 +1591,6 @@ body {
     margin: 0 !important;
   }
 
-  body.is-printing #matrixInfo.print-target {
-    display: grid !important;
-    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
-    align-items: stretch !important;
-    gap: 5px !important;
-    position: static !important;
-    margin-bottom: 9px !important;
-  }
-
-  body.is-printing #matrixInfo.print-target > .date-bar,
-  body.is-printing #matrixInfo.print-target > .info-card,
-  body.is-printing #matrixInfo.print-target > .stats-card {
-    display: block !important;
-    grid-column: auto !important;
-    min-width: 0 !important;
-    width: auto !important;
-    padding: 9px 12px !important;
-    gap: 5px !important;
-    border: 1px solid #cbd5e1 !important;
-    border-radius: 5px !important;
-    font-size: 13.5px !important;
-    box-shadow: none !important;
-  }
-
   body.is-printing #matrixInfo .info-label {
     min-width: 0 !important;
     font-size: 12px !important;
@@ -1878,9 +1854,13 @@ body {
 /* Финальная печатная настройка матрицы: без принудительного переноса
    целиком на новую страницу и с полным вписыванием по ширине листа. */
 @media print {
+  body.is-printing .matrix-print-source-hidden #matrixTableContainer {
+    display: none !important;
+  }
+
   body.is-printing #matrixTableContainer {
-    break-inside: auto !important;
-    page-break-inside: auto !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
     width: 100% !important;
     max-width: none !important;
     margin: 0 !important;
@@ -2061,3 +2041,181 @@ body {
 .rotation-assistant-footer{display:flex;justify-content:flex-end;padding:14px 24px;border-top:1px solid #334155;background:#17202b}.rotation-assistant-done{padding:10px 18px;border:0;border-radius:7px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer}.rotation-assistant-done:hover{background:#1d4ed8}
 .training-comment-cell{white-space:pre-wrap;vertical-align:top;min-width:180px}.training-comment-editor{width:100%;min-height:34px;box-sizing:border-box;resize:none;border:1px solid #2563eb;border-radius:4px;padding:5px;font:inherit;line-height:1.35;white-space:pre-wrap}
 .training-comment-modal-overlay{position:fixed;inset:0;z-index:22000;background:rgba(2,12,27,.68);display:flex;align-items:center;justify-content:center;padding:18px}.training-comment-modal{width:min(620px,100%);max-height:min(88vh,720px);overflow:auto;box-sizing:border-box;background:#10243d;color:#e5eefb;border:1px solid #315477;border-radius:14px;padding:24px;box-shadow:0 20px 60px rgba(2,12,27,.45)}.training-comment-modal h2{margin:0 0 18px;font-size:20px;color:#fff}.training-comment-modal-info{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:16px}.training-comment-modal-info div{background:#173250;border-radius:8px;padding:9px 10px;min-width:0}.training-comment-modal-info span{display:block;color:#9eb6d2;font-size:11px;margin-bottom:4px}.training-comment-modal-info b{display:block;color:#fff;font-size:13px;overflow-wrap:anywhere}.training-comment-system{border-left:3px solid #6ea8dc;background:#173250;padding:10px 12px;margin-bottom:18px;color:#bdd3ea;white-space:pre-wrap;word-break:break-word}.training-comment-modal label{display:block;margin-bottom:7px;color:#dbeafe;font-weight:700}.training-comment-modal-input{display:block;width:100%;min-height:190px;max-height:48vh;resize:vertical;box-sizing:border-box;border:1px solid #5d91c5;border-radius:8px;background:#f8fbff;color:#10243d;padding:12px;font:inherit;line-height:1.45;outline:none}.training-comment-modal-input:focus{border-color:#7ec8ff;box-shadow:0 0 0 3px rgba(86,174,239,.28)}.training-comment-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}.training-comment-modal-actions button{border:0;border-radius:7px;padding:10px 15px;cursor:pointer;font-weight:700}.training-comment-cancel{background:#d3deea;color:#10243d}.training-comment-save{background:#3b9ee8;color:#fff}.training-comment-save:hover{background:#58b2f2}@media(max-width:600px){.training-comment-modal-info{grid-template-columns:1fr}.training-comment-modal{padding:18px}}
+
+/* Финальная компоновка печати матрицы. Все элементы ME1 помещаются
+   в один альбомный лист без принудительных горизонтальных разрывов. */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 4mm;
+  }
+
+  body.is-printing #matrixInfo.print-target {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    gap: 2px !important;
+    margin-bottom: 3px !important;
+  }
+
+  body.is-printing #matrixInfo.print-target > .date-bar,
+  body.is-printing #matrixInfo.print-target > .info-card,
+  body.is-printing #matrixInfo.print-target > .stats-card {
+    min-height: 0 !important;
+    padding: 3px 5px !important;
+    border-radius: 2px !important;
+    font-size: 8px !important;
+    line-height: 1.05 !important;
+  }
+
+  body.is-printing .matrix-print-composition[data-print-fit-status="fit"] {
+    break-inside: avoid;
+  }
+}
+
+@media screen {
+  .matrix-print-composition {
+    position: absolute;
+    top: 0;
+    left: -300mm;
+    width: 289mm;
+    visibility: hidden;
+  }
+}
+
+@media print {
+  .matrix-print-composition {
+    width: 100%;
+  }
+}
+
+body.is-printing .matrix-print-composition .matrix-print-info-copy.print-target {
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  align-items: stretch !important;
+  gap: 5px !important;
+  position: static !important;
+  margin-bottom: 9px !important;
+}
+
+.matrix-print-composition .export-buttons {
+  display: none !important;
+}
+
+.matrix-print-composition .matrix-print-info-copy.print-target > .date-bar,
+.matrix-print-composition .matrix-print-info-copy.print-target > .info-card,
+.matrix-print-composition .matrix-print-info-copy.print-target > .stats-card {
+  display: block !important;
+  grid-column: auto !important;
+  min-width: 0 !important;
+  width: auto !important;
+  padding: 9px 12px !important;
+  gap: 5px !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 5px !important;
+  font-size: 13.5px !important;
+  box-shadow: none !important;
+}
+
+.matrix-print-composition .matrix-print-info-copy .info-label,
+.matrix-print-composition .matrix-print-info-copy .info-value {
+  font-size: 8px !important;
+  line-height: 1.05 !important;
+}
+
+.matrix-print-composition .matrix-print-info-copy > .info-card > .info-row {
+  display: grid;
+  grid-template-columns: minmax(66px, 1fr) minmax(0, 2fr);
+  align-items: start;
+}
+
+.matrix-print-composition .matrix-print-info-copy > .info-card .info-label {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.matrix-print-composition .matrix-print-info-copy > .info-card .info-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.matrix-print-composition .matrix-print-info-copy > .info-card .info-value.clickable {
+  border-bottom: none;
+}
+
+.matrix-print-composition .matrix-print-view {
+  display: block;
+  width: 100%;
+  --matrix-print-font-size: 7px;
+  --matrix-print-cell-padding: 2px 3px;
+  --matrix-print-line-height: 1.05;
+}
+
+.matrix-print-composition .matrix-print-view[data-density="compact"] {
+  --matrix-print-font-size: 5.5px;
+  --matrix-print-cell-padding: 0 1px;
+  --matrix-print-line-height: 1;
+}
+
+.matrix-print-composition .matrix-print-block {
+  margin: 0 0 2mm;
+}
+
+.matrix-print-composition .matrix-print-block h2 {
+  margin: 0 0 1mm;
+  color: #0f172a;
+  font-size: 8px;
+  line-height: 1;
+  break-after: avoid;
+}
+
+.matrix-print-composition .matrix-print-table {
+  width: 100% !important;
+  min-width: 0;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.matrix-print-composition .matrix-print-table th,
+.matrix-print-composition .matrix-print-table td {
+  min-width: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: var(--matrix-print-cell-padding) !important;
+  font-size: var(--matrix-print-font-size) !important;
+  line-height: var(--matrix-print-line-height) !important;
+  overflow-wrap: anywhere !important;
+}
+
+.matrix-print-composition .matrix-print-table th:first-child,
+.matrix-print-composition .matrix-print-table td:first-child {
+  width: 145px !important;
+  min-width: 145px !important;
+  max-width: 145px !important;
+  text-align: left !important;
+}
+
+.matrix-print-composition .matrix-print-table .matrix-summary-column {
+  width: 24px !important;
+  min-width: 24px !important;
+  max-width: 24px !important;
+  padding-inline: 1px !important;
+}
+
+.matrix-print-composition .matrix-print-placeholder {
+  color: transparent !important;
+  background: transparent !important;
+}
+
+.matrix-print-composition .matrix-print-table thead {
+  display: table-header-group !important;
+}
+
+.matrix-print-composition .matrix-print-table tbody tr {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.matrix-print-composition [data-density="compact"] .matrix-print-table .status-marker-present {
+  width: 6px !important;
+  height: 6px !important;
+}
