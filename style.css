@@ -600,6 +600,83 @@ td:first-child {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
+/* Устаревание постановок */
+.placement-aging-toolbar,
+.placement-aging-counts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.placement-aging-toolbar label {
+  font-weight: 600;
+  color: #334155;
+}
+
+.placement-aging-toolbar select,
+.placement-aging-toolbar input {
+  max-width: 100%;
+  padding: 6px 9px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #0f172a;
+  background: #fff;
+  font: inherit;
+}
+
+.placement-aging-counts span {
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.placement-aging-diagnostics {
+  display: none !important;
+  margin: 0 0 12px;
+  color: #475569;
+}
+
+.placement-aging-table-container {
+  overflow-x: auto;
+}
+
+.placement-aging-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.placement-aging-table th,
+.placement-aging-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+}
+
+.placement-aging-table th {
+  background: #f8fafc;
+  color: #334155;
+}
+
+.placement-aging-status {
+  font-weight: 600;
+}
+
+.placement-aging-red {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.placement-aging-yellow {
+  color: #854d0e;
+  background: #fef9c3;
+}
+
+.placement-aging-green {
+  color: #166534;
+  background: #dcfce7;
+}
+
 /* Вкладка «Статистика» */
 .stats-dashboard {
   display: flex;
@@ -1758,6 +1835,10 @@ body {
     align-items: stretch !important;
     margin: 0 auto !important;
     overflow: visible !important;
+  }
+
+  #rotation .rotation-fact-legend {
+    display: none;
   }
 
   body.is-printing #rotation.print-target,

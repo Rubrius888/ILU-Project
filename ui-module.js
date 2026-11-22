@@ -586,6 +586,10 @@ function openTab(event, id) {
     selectedTab.classList.add('active');
   }
 
+  if (id === 'placementAging') {
+    renderPlacementAging();
+  }
+
   if (id === 'training' && typeof renderValidatedModelsTable === 'function') {
     renderValidatedModelsTable();
   }

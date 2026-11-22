@@ -1071,14 +1071,24 @@ function isRotationAttendance(index) {
   return operatorAttendance[index] === 'Я' || operatorAttendance[index] === 'Явка';
 }
 
-function getLastPlacementDate(opName, postName) {
+function getLastPlacementDate(opIndexOrName, postIndexOrName) {
+  const opIndex = Number.isInteger(opIndexOrName) ? opIndexOrName : -1;
+  const postIndex = Number.isInteger(postIndexOrName) ? postIndexOrName : -1;
+  const opName = opIndex >= 0 ? operators[opIndex] : opIndexOrName;
+  const postName = postIndex >= 0 ? posts[postIndex] : postIndexOrName;
+  const operatorId = opIndex >= 0 ? operatorIds?.[opIndex] : null;
+  const postId = postIndex >= 0 ? postIds?.[postIndex] : null;
   let lastDate = null;
   for (const entry of placementLog) {
-    if (entry.opName === opName && entry.postName === postName) {
-      const date = parseRotationDate(entry.date);
-      if (!date) continue;
-      if (!lastDate || date > lastDate) lastDate = date;
-    }
+    const hasStableIds = operatorId && postId && entry.operatorId && entry.postId;
+    const matches = hasStableIds
+      ? entry.operatorId === operatorId && entry.postId === postId
+      : (!entry.operatorId || !entry.postId) &&
+        entry.opName === opName && entry.postName === postName;
+    if (!matches) continue;
+    const date = parseRotationDate(entry.date);
+    if (!date) continue;
+    if (!lastDate || date > lastDate) lastDate = date;
   }
   return lastDate;
 }
@@ -1095,7 +1105,186 @@ function getWorstAge(opIndex) {
   return worst;
 }
 
-window.ILU_ROTATION_GENERATOR_VERSION = '1.2-ds-reserve-render-2026-10-11';
+// Validate the final state independently of the order in which moves were found.
+function validateRotationConfiguration(input, finalState) {
+  const { state, roles, levels } = input;
+  if (!Array.isArray(finalState) || finalState.length !== state.length) {
+    return { valid: false, reason: 'invalid_dimensions' };
+  }
+  const used = new Set();
+  for (let post = 0; post < state.length; post++) {
+    if (state[post] !== null && ['НУ', 'СО'].includes(roles[state[post]]) &&
+        finalState[post] !== state[post]) {
+      return { valid: false, reason: 'excluded_role' };
+    }
+    const operator = finalState[post];
+    if (operator === null) {
+      if (state[post] !== null) return { valid: false, reason: 'incomplete_coverage' };
+      continue;
+    }
+    if (!Number.isInteger(operator) || operator < 0 || operator >= roles.length) {
+      return { valid: false, reason: 'invalid_operator' };
+    }
+    if (used.has(operator)) return { valid: false, reason: 'operator_conflict' };
+    used.add(operator);
+    if (operator === state[post]) continue;
+    if (['НУ', 'СО', 'ДС'].includes(roles[operator])) {
+      return { valid: false, reason: 'excluded_role' };
+    }
+    if (!['L', 'U'].includes(levels[post]?.[operator])) {
+      return { valid: false, reason: 'qualification' };
+    }
+  }
+  return { valid: true, reason: null };
+}
+
+function searchRotationConfigurations(input) {
+  const { state, roles, levels, primaryOp, targetPost } = input;
+  const started = Date.now();
+  const maxNodes = input.maxNodes ?? Math.min(24000, Math.max(2000, state.length * roles.length * 24));
+  const maxResults = input.maxResults ?? 512;
+  const diagnostics = {
+    nodes: 0, repeatedStates: 0, impossibleBranches: 0,
+    qualificationRejected: 0, coverageRejected: 0, operatorRejected: 0,
+    finalConfigurationsChecked: 0, searchComplete: true, limitReason: null
+  };
+  const configurations = [];
+  const visited = new Set();
+  const emitted = new Set();
+  const blockedOperators = new Set(input.blockedOperators || []);
+  const blockedPosts = new Set(input.blockedPosts || []);
+  const stableOperator = op => String(input.operatorIds?.[op] || input.operators?.[op] || op);
+  const stablePost = post => String(input.postIds?.[post] || input.posts?.[post] || post);
+  const allowed = (op, post) => !['НУ', 'СО', 'ДС'].includes(roles[op]) &&
+    ['L', 'U'].includes(levels[post]?.[op]);
+  const domains = state.map((_, post) => {
+    const candidates = [];
+    for (let op = 0; op < roles.length; op++) {
+      if (allowed(op, post)) candidates.push(op);
+      else diagnostics.qualificationRejected++;
+    }
+    return candidates.sort((a, b) => stableOperator(a).localeCompare(stableOperator(b)));
+  });
+
+  function materialize(fixed) {
+    const next = state.slice();
+    const assigned = new Set(fixed.values());
+    for (let post = 0; post < next.length; post++) {
+      if (assigned.has(next[post])) next[post] = null;
+    }
+    for (const [post, op] of fixed) next[post] = op;
+    return next;
+  }
+
+  // A matching feasibility check proves that remaining holes can be covered.
+  // It permits occupied candidates: their source posts are resolved recursively.
+  function canCover(holes, fixedOperators) {
+    const matched = new Map();
+    function augment(post, seen) {
+      for (const op of domains[post]) {
+        if (fixedOperators.has(op) || blockedOperators.has(op) || seen.has(op)) continue;
+        seen.add(op);
+        if (!matched.has(op) || augment(matched.get(op), seen)) {
+          matched.set(op, post);
+          return true;
+        }
+      }
+      return false;
+    }
+    return holes.every(post => augment(post, new Set()));
+  }
+
+  function visit(fixed) {
+    if (diagnostics.nodes >= maxNodes || configurations.length >= maxResults) {
+      diagnostics.searchComplete = false;
+      diagnostics.limitReason = diagnostics.nodes >= maxNodes ? 'node_budget' : 'result_budget';
+      return;
+    }
+    const key = [...fixed].sort((a, b) => stablePost(a[0]).localeCompare(stablePost(b[0])))
+      .map(([post, op]) => `${post}:${op}`).join('|');
+    if (visited.has(key)) {
+      diagnostics.repeatedStates++;
+      return;
+    }
+    visited.add(key);
+    diagnostics.nodes++;
+    const next = materialize(fixed);
+    if (next.some((op, post) => op !== state[post] &&
+        (blockedPosts.has(post) || blockedOperators.has(state[post]) ||
+         (state[post] !== null && ['НУ', 'СО'].includes(roles[state[post]]))))) {
+      diagnostics.operatorRejected++;
+      return;
+    }
+    const fixedOperators = new Set(fixed.values());
+    const holes = next.map((op, post) => op === null && state[post] !== null ? post : null)
+      .filter(post => post !== null);
+    if (holes.some(post => blockedPosts.has(post)) || !canCover(holes, fixedOperators)) {
+      diagnostics.impossibleBranches++;
+      diagnostics.coverageRejected++;
+      return;
+    }
+    if (holes.length) {
+      const available = post => domains[post].filter(op =>
+        !fixedOperators.has(op) && !blockedOperators.has(op));
+      holes.sort((a, b) => available(a).length - available(b).length ||
+        stablePost(a).localeCompare(stablePost(b)));
+      const post = holes[0];
+      for (const op of available(post)) {
+        const source = state.indexOf(op);
+        if (source >= 0 && blockedPosts.has(source)) {
+          diagnostics.operatorRejected++;
+          continue;
+        }
+        const branch = new Map(fixed);
+        branch.set(post, op);
+        visit(branch);
+        if (!diagnostics.searchComplete) break;
+      }
+      return;
+    }
+
+    diagnostics.finalConfigurationsChecked++;
+    const validation = validateRotationConfiguration(input, next);
+    if (!validation.valid) {
+      if (validation.reason === 'operator_conflict') diagnostics.operatorRejected++;
+      else diagnostics.coverageRejected++;
+      return;
+    }
+    const finalKey = JSON.stringify(next);
+    if (!emitted.has(finalKey)) {
+      emitted.add(finalKey);
+      configurations.push(next);
+    }
+
+    // A displaced ordinary operator may continue the configuration to another
+    // post. This explores useful forward branches as well as backward coverage.
+    const used = new Set(next.filter(op => op !== null));
+    for (let source = 0; source < state.length; source++) {
+      const op = state[source];
+      if (op === null || used.has(op) || ['НУ', 'СО', 'ДС'].includes(roles[op])) continue;
+      const destinations = state.map((_, post) => post).filter(post =>
+        !fixed.has(post) && !blockedPosts.has(post) && allowed(op, post));
+      destinations.sort((a, b) => stablePost(a).localeCompare(stablePost(b)));
+      for (const post of destinations) {
+        const branch = new Map(fixed);
+        branch.set(post, op);
+        visit(branch);
+        if (!diagnostics.searchComplete) return;
+      }
+    }
+  }
+
+  if (allowed(primaryOp, targetPost) && !blockedOperators.has(primaryOp) &&
+      !blockedPosts.has(targetPost) && !blockedPosts.has(state.indexOf(primaryOp))) {
+    visit(new Map([[targetPost, primaryOp]]));
+  } else {
+    diagnostics.operatorRejected++;
+  }
+  diagnostics.elapsedMs = Date.now() - started;
+  return { configurations, diagnostics };
+}
+
+window.ILU_ROTATION_GENERATOR_VERSION = '2.0-final-configurations-2026-11-22';
 function generateRotationPlan() {
   const thead = document.querySelector('#rotCalendarTable thead');
   const tbody = document.querySelector('#rotCalendarTable tbody');
@@ -1132,10 +1321,10 @@ function generateRotationPlan() {
   thead.innerHTML = headerHTML;
 
   const excludedRoles = new Set(['НУ', 'СО', 'ДС']);
-  const isEligibleOperator = opIndex =>
-    !excludedRoles.has(operatorRoles[opIndex]) && isRotationAttendance(opIndex);
+  const isPotentialOperator = opIndex =>
+    !excludedRoles.has(operatorRoles[opIndex]);
   const canUsePost = (opIndex, postIndex) =>
-    isEligibleOperator(opIndex) && isRotationLevel(data[postIndex]?.[opIndex]);
+    isPotentialOperator(opIndex) && isRotationLevel(data[postIndex]?.[opIndex]);
   const cloneState = state => [...state];
   const workingDays = [];
   const currentDate = new Date();
@@ -1179,24 +1368,14 @@ function generateRotationPlan() {
     }
   }
 
-  const coveredPosts = new Set(
-    baselineState
-      .map((opIndex, postIndex) =>
-        opIndex !== null && isRotationLevel(data[postIndex]?.[opIndex])
-          ? postIndex
-          : null
-      )
-      .filter(postIndex => postIndex !== null)
-  );
-
   const needs = [];
   for (let opIndex = 0; opIndex < operators.length; opIndex++) {
-    if (!isEligibleOperator(opIndex)) continue;
+    if (!isPotentialOperator(opIndex)) continue;
     for (let postIndex = 0; postIndex < posts.length; postIndex++) {
       if (!canUsePost(opIndex, postIndex)) continue;
       if (baselineOpPost[opIndex] === postIndex) continue;
 
-      const lastDate = getLastPlacementDate(operators[opIndex], posts[postIndex]);
+      const lastDate = getLastPlacementDate(opIndex, postIndex);
       const deadline = lastDate ? addRotationCalendarMonths(lastDate, 3) : null;
       const monthStart = new Date(year, month, 1);
       const monthEnd = new Date(year, month + 1, 0);
@@ -1224,26 +1403,27 @@ function generateRotationPlan() {
   }
 
   const categoryOrder = { overdue: 0, unknown: 1, upcoming: 2 };
-  // Считаем только блоки, в которых оператор был основной целью.
-  // Участие в цепочке как замещение сюда не попадает.
-  const plannedPrimaryBlocks = new Map();
-  const plannedPrimaryBlockCount = opIndex =>
-    plannedPrimaryBlocks.get(opIndex) || 0;
+  // Each newly satisfied need contributes once, including usefulNeeds.
+  const plannedOperatorBlocks = new Map();
+  const plannedOperatorBlockCount = opIndex =>
+    plannedOperatorBlocks.get(opIndex) || 0;
   const compareNeeds = (a, b) => {
     const categoryDiff = categoryOrder[a.category] - categoryOrder[b.category];
     if (categoryDiff) return categoryDiff;
     if (a.category === 'overdue' && a.urgency !== b.urgency) return b.urgency - a.urgency;
     if (a.category === 'upcoming' && a.urgency !== b.urgency) return a.urgency - b.urgency;
     if (a.category === 'unknown' && b.category === 'unknown') {
-      const balanceDiff = plannedPrimaryBlockCount(a.opIndex) -
-        plannedPrimaryBlockCount(b.opIndex);
+      const balanceDiff = plannedOperatorBlockCount(a.opIndex) -
+        plannedOperatorBlockCount(b.opIndex);
       if (balanceDiff) return balanceDiff;
     }
-    return a.opIndex - b.opIndex || a.postIndex - b.postIndex;
+    return String(operatorIds[a.opIndex] || operators[a.opIndex]).localeCompare(
+      String(operatorIds[b.opIndex] || operators[b.opIndex])) ||
+      String(postIds[a.postIndex] || posts[a.postIndex]).localeCompare(
+        String(postIds[b.postIndex] || posts[b.postIndex]));
   };
   needs.sort(compareNeeds);
 
-  const unknownTotal = needs.filter(need => need.category === 'unknown').length;
   const virtualStates = Array.from(
     { length: daysInMonth },
     () => cloneState(baselineState)
@@ -1289,157 +1469,99 @@ function generateRotationPlan() {
     }
     : null;
   const plannedNeedKeys = new Set();
-  let unknownScheduled = 0;
+  const rejectionDiagnostics = new Map();
+  const diagnosticsByNeed = new Map();
 
-  function currentOperatorPost(state, opIndex) {
-    const postIndex = state.indexOf(opIndex);
-    return postIndex >= 0 ? postIndex : null;
+  function recordRejectedNeed(need, options) {
+    const details = options.diagnostics || {};
+    let reason = 'no_valid_chain';
+    if (details.searchTruncated) {
+      reason = 'search_budget';
+    } else if (details.potentialCandidates === 0 && details.potentialSearchComplete) {
+      reason = 'no_potential_configuration';
+    } else if (details.blockedWindows > 0 && details.availableWindows === 0) {
+      reason = 'calendar_capacity';
+    } else if (
+      details.attendanceRejected > 0 &&
+      details.candidateCount > 0 &&
+      details.conflictCount + details.attendanceRejected >= details.candidateCount
+    ) {
+      reason = 'actual_attendance';
+    } else if (
+      details.conflictCount > 0 &&
+      details.conflictCount + details.attendanceRejected >= details.candidateCount
+    ) {
+      reason = 'calendar_conflict';
+    }
+    const previous = rejectionDiagnostics.get(need.key);
+    rejectionDiagnostics.set(need.key, {
+      ...details, reason,
+      firstFailure: previous?.firstFailure || { reason, ...details }
+    });
   }
 
-  function chainParticipants(chain) {
-    return new Set(chain.filter(item => !item.reserve).map(item => item.opIndex));
+  const configurationCache = new Map();
+  const generationSearchStarted = Date.now();
+
+  function chainOperators(chain) {
+    return new Set([
+      ...chain.map(item => item.opIndex),
+      ...(chain.releasedDs || []).map(item => item.opIndex)
+    ]);
   }
 
   function chainPosts(chain) {
-    return new Set(
-      chain
-        .map(item => item.toPost)
-        .filter(postIndex => postIndex !== null && postIndex !== undefined)
-    );
+    return new Set(chain.flatMap(item => [item.fromPost, item.toPost])
+      .filter(post => post !== null && post !== undefined));
   }
 
   function applyChain(state, chain) {
-    const next = cloneState(state);
-    const participantOps = chainParticipants(chain);
+    const next = state.slice();
     for (const item of chain) {
-      if (item.fromPost !== null && next[item.fromPost] === item.opIndex) {
-        next[item.fromPost] = null;
-      }
+      if (item.fromPost !== null && state[item.fromPost] !== item.opIndex) return null;
+      if (item.fromPost === null && state.includes(item.opIndex)) return null;
+      if (item.fromPost !== null) next[item.fromPost] = null;
     }
-    for (const reserve of chain.reserveOps || []) {
-      if (next[reserve.postIndex] !== null && next[reserve.postIndex] !== reserve.opIndex) return null;
-      next[reserve.postIndex] = reserve.opIndex;
+    for (const item of chain.releasedDs || []) {
+      if (state[item.postIndex] !== item.opIndex || operatorRoles[item.opIndex] !== 'ДС') return null;
+      next[item.postIndex] = null;
     }
     for (const item of chain) {
-      if (item.reserve) continue;
-      if (item.toPost === null || item.toPost === undefined) continue;
-      const occupant = next[item.toPost];
-      if (occupant !== null && !participantOps.has(occupant)) return null;
+      if (item.toPost === null) continue;
+      if (next[item.toPost] !== null) return null;
       next[item.toPost] = item.opIndex;
     }
-    for (const postIndex of coveredPosts) {
-      const opIndex = next[postIndex];
-      if (opIndex === null || !isRotationLevel(data[postIndex]?.[opIndex])) return null;
-    }
-    return next;
+    return validateRotationConfiguration({ state, roles: operatorRoles, levels: data }, next).valid
+      ? next : null;
   }
 
-  function buildChainCandidates(state, primaryOp, targetPost) {
-    if (!canUsePost(primaryOp, targetPost)) return [];
-    const sourcePost = currentOperatorPost(state, primaryOp);
-    const initialTargetOccupant = state[targetPost];
-    const results = [];
-    const maxResults = 500;
-    const initialChain = [{ opIndex: primaryOp, fromPost: sourcePost, toPost: targetPost }];
-    const usedOps = new Set([primaryOp]);
-    const usedPosts = new Set([targetPost]);
-
-    const emitWithFreeEndpoint = (chain, chainOps, chainPostsSet) => {
-      if (sourcePost === null) {
-        const applied = applyChain(state, chain);
-        if (applied) results.push(chain);
-        return;
+  function buildChainCandidates(state, primaryOp, targetPost, blockedOps = [], blocked = []) {
+    const key = JSON.stringify([state, primaryOp, targetPost, blockedOps, blocked]);
+    if (configurationCache.has(key)) return configurationCache.get(key);
+    const result = searchRotationConfigurations({
+      state, primaryOp, targetPost,
+      operators, posts, operatorIds, postIds,
+      roles: operatorRoles, levels: data,
+      blockedOperators: blockedOps, blockedPosts: blocked
+    });
+    const candidates = result.configurations.map(finalState => {
+      const chain = [];
+      for (let opIndex = 0; opIndex < operators.length; opIndex++) {
+        if (['НУ', 'СО', 'ДС'].includes(operatorRoles[opIndex])) continue;
+        const from = state.indexOf(opIndex);
+        const to = finalState.indexOf(opIndex);
+        if (from === to) continue;
+        chain.push({ opIndex, fromPost: from < 0 ? null : from, toPost: to < 0 ? null : to });
       }
-
-      for (let freeOp = 0; freeOp < operators.length; freeOp++) {
-        if (chainOps.has(freeOp)) continue;
-        if (currentOperatorPost(state, freeOp) !== null) continue;
-        const isReserve = operatorRoles[freeOp] === 'ДС';
-        if (isReserve) {
-          const reason = !isRotationAttendance(freeOp)
-            ? 'неявка'
-            : !isRotationLevel(data[sourcePost]?.[freeOp])
-              ? 'нет L/U на освобождаемом посту'
-              : null;
-          if (rotationDiagnostics) rotationDiagnostics.endpointChecks.push({
-            operator: operators[freeOp], post: posts[sourcePost], accepted: !reason, reason
-          });
-          if (reason) continue;
-        } else if (!canUsePost(freeOp, sourcePost)) continue;
-        if (chainPostsSet.has(sourcePost)) continue;
-        const endpoint = [
-          ...chain,
-          { opIndex: freeOp, fromPost: null, toPost: sourcePost, reserve: isReserve }
-        ];
-        if (isReserve) endpoint.reserveOps = [{ opIndex: freeOp, postIndex: sourcePost }];
-        const applied = applyChain(state, endpoint);
-        if (rotationDiagnostics && isReserve && !applied) {
-          rotationDiagnostics.endpointChecks.push({
-            operator: operators[freeOp], post: posts[sourcePost], accepted: false,
-            reason: 'цепочка не прошла проверку покрытия/занятости'
-          });
-        }
-        if (applied) results.push(endpoint);
-        if (results.length >= maxResults) return;
-      }
-    };
-
-    const visit = (displacedOp, chain, chainOps, chainPostsSet) => {
-      if (results.length >= maxResults) return;
-      const source = currentOperatorPost(state, displacedOp);
-      if (source === null) return;
-
-      // Открытая цепочка: свободный основной оператор занимает целевой пост,
-      // а вытесненный оператор временно освобождается. Такое освобождение
-      // действует только внутри блока и не является фактической постановкой.
-      if (sourcePost === null && isEligibleOperator(displacedOp)) {
-        const opened = [
-          ...chain,
-          { opIndex: displacedOp, fromPost: source, toPost: null }
-        ];
-        if (applyChain(state, opened)) results.push(opened);
-      }
-
-      for (let destination = 0; destination < posts.length; destination++) {
-        if (destination === source || chainPostsSet.has(destination)) continue;
-        if (!canUsePost(displacedOp, destination)) continue;
-
-        // Возврат на исходный пост первичного оператора замыкает цепочку.
-        if (destination === sourcePost && state[destination] === primaryOp) {
-          const closed = [
-            ...chain,
-            { opIndex: displacedOp, fromPost: source, toPost: destination }
-          ];
-          if (applyChain(state, closed)) results.push(closed);
-          continue;
-        }
-
-        const occupant = state[destination];
-        const nextChain = [
-          ...chain,
-          { opIndex: displacedOp, fromPost: source, toPost: destination }
-        ];
-        const nextOps = new Set(chainOps);
-        nextOps.add(displacedOp);
-        const nextPosts = new Set(chainPostsSet);
-        nextPosts.add(destination);
-
-        if (occupant === null) {
-          emitWithFreeEndpoint(nextChain, nextOps, nextPosts);
-        } else if (!nextOps.has(occupant)) {
-          visit(occupant, nextChain, nextOps, nextPosts);
-        }
-        if (results.length >= maxResults) return;
-      }
-    };
-
-    if (initialTargetOccupant === null) {
-      emitWithFreeEndpoint(initialChain, usedOps, usedPosts);
-    } else if (initialTargetOccupant !== primaryOp && isEligibleOperator(initialTargetOccupant)) {
-      visit(initialTargetOccupant, initialChain, usedOps, usedPosts);
-    }
-
-    return results;
+      chain.releasedDs = state.flatMap((opIndex, postIndex) =>
+        opIndex !== null && operatorRoles[opIndex] === 'ДС' && finalState[postIndex] !== opIndex
+          ? [{ opIndex, postIndex }] : []);
+      return chain;
+    }).filter(chain => chain.some(item => item.opIndex === primaryOp && item.toPost === targetPost));
+    candidates.searchDiagnostics = result.diagnostics;
+    candidates.searchTruncated = !result.diagnostics.searchComplete;
+    configurationCache.set(key, candidates);
+    return candidates;
   }
 
   function chainUsefulNeeds(chain) {
@@ -1450,88 +1572,98 @@ function generateRotationPlan() {
     );
   }
 
-  function chainUrgencyBenefit(chain) {
-    return chainUsefulNeeds(chain).reduce((total, need) => {
-      if (need.category === 'overdue') return total + 100000 + need.urgency;
-      if (need.category === 'unknown') return total + 10000;
-      return total + Math.max(1, 1000 - need.urgency);
-    }, 0);
-  }
-
   function chainConflicts(chain, blockDays) {
-    const ops = chainParticipants(chain);
-    const destinationPosts = chainPosts(chain);
-    return blockDays.some(day => {
-      if (activeChainCount[day] >= maxConcurrentChains) return true;
-      return [...ops].some(op => activeOperators[day].has(op)) ||
-        [...destinationPosts].some(post => activePosts[day].has(post));
-    });
+    const ops = chainOperators(chain);
+    const occupiedPosts = chainPosts(chain);
+    return blockDays.some(day => activeChainCount[day] >= maxConcurrentChains ||
+      [...ops].some(op => activeOperators[day].has(op)) ||
+      [...occupiedPosts].some(post => activePosts[day].has(post)));
   }
 
   function findChainOptions(need) {
     const options = [];
-    for (let startPosition = 0; startPosition + durationWorkingDays <= workingDays.length; startPosition++) {
-      const blockDays = workingDays.slice(startPosition, startPosition + durationWorkingDays);
-      if (chainConflicts([], blockDays)) continue;
-
-      const firstDay = blockDays[0];
-      const candidates = buildChainCandidates(
-        virtualStates[firstDay],
-        need.opIndex,
-        need.postIndex
-      );
-      for (const chain of candidates) {
-        if (chainConflicts(chain, blockDays)) continue;
-        const appliedStates = [];
-        let valid = true;
-        for (const day of blockDays) {
-          const applied = applyChain(virtualStates[day], chain);
-          if (!applied) {
-            valid = false;
-            break;
-          }
-          appliedStates.push({ day, state: applied });
-        }
-        if (!valid) continue;
-        options.push({
-          chain,
-          blockDays,
-          startPosition,
-          usefulNeeds: chainUsefulNeeds(chain),
-          urgencyBenefit: chainUrgencyBenefit(chain),
-          appliedStates
-        });
+    const potential = buildChainCandidates(baselineState, need.opIndex, need.postIndex);
+    const windows = [];
+    let candidateCount = 0;
+    let conflictCount = 0;
+    let coverageRejected = 0;
+    let searchTruncated = potential.searchTruncated;
+    for (let start = 0; start + durationWorkingDays <= workingDays.length; start++) {
+      const blockDays = workingDays.slice(start, start + durationWorkingDays);
+      const windowResult = {
+        days: blockDays.map(day => day + 1), candidates: 0, accepted: 0, reason: null
+      };
+      windows.push(windowResult);
+      if (chainConflicts([], blockDays)) {
+        windowResult.reason = 'calendar_capacity';
+        continue;
       }
+      const blockedOps = [...new Set(blockDays.flatMap(day => [...activeOperators[day]]))]
+        .sort((a, b) => a - b);
+      const blocked = [...new Set(blockDays.flatMap(day => [...activePosts[day]]))]
+        .sort((a, b) => a - b);
+      const candidates = buildChainCandidates(
+        virtualStates[blockDays[0]], need.opIndex, need.postIndex, blockedOps, blocked
+      );
+      searchTruncated ||= candidates.searchTruncated;
+      candidateCount += candidates.length;
+      windowResult.candidates = candidates.length;
+      windowResult.searchComplete = !candidates.searchTruncated;
+      for (const chain of candidates) {
+        if (chainConflicts(chain, blockDays)) {
+          conflictCount++;
+          continue;
+        }
+        const appliedStates = blockDays.map(day => ({ day, state: applyChain(virtualStates[day], chain) }));
+        if (appliedStates.some(item => item.state === null)) {
+          coverageRejected++;
+          continue;
+        }
+        const usefulNeeds = chainUsefulNeeds(chain);
+        if (!usefulNeeds.some(item => item.key === need.key)) continue;
+        options.push({ chain, blockDays, startPosition: start, usefulNeeds, appliedStates });
+        windowResult.accepted++;
+      }
+      windowResult.reason = windowResult.accepted ? 'available' :
+        candidates.searchTruncated ? 'search_budget' :
+          candidates.length ? 'calendar_conflict' : 'no_configuration_for_window';
     }
+    const blockedWindows = windows.filter(item => item.reason === 'calendar_capacity').length;
+    options.diagnostics = {
+      potentialCandidates: potential.length,
+      potentialSearchComplete: !potential.searchTruncated,
+      potentialSearch: potential.searchDiagnostics,
+      candidateCount, conflictCount, coverageRejected, searchTruncated,
+      searchComplete: !searchTruncated,
+      blockedWindows, availableWindows: windows.length - blockedWindows, windows
+    };
+    const history = diagnosticsByNeed.get(need.key) || [];
+    history.push(options.diagnostics);
+    diagnosticsByNeed.set(need.key, history);
     return options;
   }
 
+  function compareOptions(a, b) {
+    const count = (option, category) => option.usefulNeeds.filter(item => item.category === category).length;
+    const overdue = count(b, 'overdue') - count(a, 'overdue');
+    if (overdue) return overdue;
+    const unknown = count(b, 'unknown') - count(a, 'unknown');
+    if (unknown) return unknown;
+    const useful = b.usefulNeeds.length - a.usefulNeeds.length;
+    if (useful) return useful;
+    const balance = option => [...new Set(option.usefulNeeds.map(item => item.opIndex))]
+      .reduce((sum, op) => sum + plannedOperatorBlockCount(op), 0);
+    const balanceDifference = balance(a) - balance(b);
+    if (balanceDifference) return balanceDifference;
+    if (a.chain.length !== b.chain.length) return a.chain.length - b.chain.length;
+    const stableKey = option => option.chain.map(item =>
+      String(operatorIds[item.opIndex] || operators[item.opIndex]) + '>' +
+      String(postIds[item.toPost] || posts[item.toPost] || 'free')).sort().join('|');
+    return a.startPosition - b.startPosition || stableKey(a).localeCompare(stableKey(b));
+  }
+
   function chooseChainOption(need, options) {
-    const unknownTarget = unknownTotal > 0
-      ? Math.round(((unknownScheduled + 1) / (unknownTotal + 1)) * workingDays.length)
-      : 0;
-    options.sort((a, b) => {
-      if (a.chain.length !== b.chain.length) return a.chain.length - b.chain.length;
-      if (a.usefulNeeds.length !== b.usefulNeeds.length) {
-        return b.usefulNeeds.length - a.usefulNeeds.length;
-      }
-      if (a.urgencyBenefit !== b.urgencyBenefit) return b.urgencyBenefit - a.urgencyBenefit;
-      if (need.category === 'unknown' && a.startPosition !== b.startPosition) {
-        return Math.abs(a.startPosition - unknownTarget) - Math.abs(b.startPosition - unknownTarget);
-      }
-      const opOrder = Math.min(...a.chain.map(item => item.opIndex)) -
-        Math.min(...b.chain.map(item => item.opIndex));
-      if (opOrder) return opOrder;
-      const aPostOrder = a.chain
-        .map(item => item.toPost)
-        .filter(postIndex => postIndex !== null && postIndex !== undefined);
-      const bPostOrder = b.chain
-        .map(item => item.toPost)
-        .filter(postIndex => postIndex !== null && postIndex !== undefined);
-      const postOrder = (aPostOrder.length ? Math.min(...aPostOrder) : Infinity) -
-        (bPostOrder.length ? Math.min(...bPostOrder) : Infinity);
-      return postOrder || a.startPosition - b.startPosition;
-    });
+    options.sort(compareOptions);
     return options[0] || null;
   }
 
@@ -1542,8 +1674,8 @@ function generateRotationPlan() {
       virtualStates[day] = state;
       activeChainCount[day]++;
       for (const item of option.chain) {
-        if (item.reserve) continue;
         activeOperators[day].add(item.opIndex);
+        if (item.reserve) continue;
         if (item.toPost === null || item.toPost === undefined) continue;
         activePosts[day].add(item.toPost);
         schedule[day][item.toPost] = {
@@ -1559,13 +1691,20 @@ function generateRotationPlan() {
           chainId
         };
       }
+      for (const released of option.chain.releasedDs || []) {
+        activeOperators[day].add(released.opIndex);
+      }
     }
     for (const usefulNeed of usefulNeeds) plannedNeedKeys.add(usefulNeed.key);
-    plannedPrimaryBlocks.set(
-      need.opIndex,
-      plannedPrimaryBlockCount(need.opIndex) + 1
-    );
-    unknownScheduled += usefulNeeds.filter(item => item.category === 'unknown').length;
+    rejectionDiagnostics.delete(need.key);
+    usefulNeeds.forEach(usefulNeed => rejectionDiagnostics.delete(usefulNeed.key));
+    const balancedOperators = new Set([need.opIndex, ...usefulNeeds.map(item => item.opIndex)]);
+    for (const opIndex of balancedOperators) {
+      plannedOperatorBlocks.set(
+        opIndex,
+        plannedOperatorBlockCount(opIndex) + 1
+      );
+    }
 
     chains.push({
       id: chainId,
@@ -1582,6 +1721,10 @@ function generateRotationPlan() {
       reserves: (option.chain.reserveOps || []).map(reserve => ({
         operator: operators[reserve.opIndex],
         post: posts[reserve.postIndex]
+      })),
+      releasedDs: (option.chain.releasedDs || []).map(item => ({
+        operator: operators[item.opIndex], operatorId: operatorIds[item.opIndex],
+        post: posts[item.postIndex], postId: postIds[item.postIndex]
       })),
       primaryNeed: {
         operator: need.operator,
@@ -1620,16 +1763,30 @@ function generateRotationPlan() {
         .sort(compareNeeds);
       if (pendingNeeds.length === 0) break;
 
-      let committed = false;
+      let selected = null;
       for (const need of pendingNeeds) {
-        const option = chooseChainOption(need, findChainOptions(need));
-        if (!option) continue;
-        commitChain(option, need);
-        progress = true;
-        committed = true;
-        break;
+        if (selected && categoryOrder[need.category] > categoryOrder[selected.need.category]) break;
+        const options = findChainOptions(need);
+        const option = chooseChainOption(need, options);
+        if (!option) {
+          recordRejectedNeed(need, options);
+          continue;
+        }
+        if (!option.usefulNeeds.some(item => item.key === need.key)) {
+          rejectionDiagnostics.set(need.key, {
+            reason: 'chain_does_not_cover_need',
+            ...(options.diagnostics || {})
+          });
+          continue;
+        }
+        if (!selected || compareOptions(option, selected.option) < 0 ||
+            (compareOptions(option, selected.option) === 0 && compareNeeds(need, selected.need) < 0)) {
+          selected = { need, option };
+        }
       }
-      if (!committed) break;
+      if (!selected) break;
+      commitChain(selected.option, selected.need);
+      progress = true;
     }
     if (!progress) break;
   }
@@ -1640,6 +1797,7 @@ function generateRotationPlan() {
     generatedAt: new Date().toISOString(),
     durationWorkingDays,
     maxConcurrentChains,
+    searchElapsedMs: Date.now() - generationSearchStarted,
     chains,
     reserveCoverages: chains.flatMap(chain => (chain.reserves || []).map(reserve => ({
       chainId: chain.id,
@@ -1654,7 +1812,9 @@ function generateRotationPlan() {
       post: need.post,
       category: need.category,
       deadline: need.deadline ? `${need.deadline.getFullYear()}-${String(need.deadline.getMonth() + 1).padStart(2, '0')}-${String(need.deadline.getDate()).padStart(2, '0')}` : null,
-      planned: plannedNeedKeys.has(need.key)
+      planned: plannedNeedKeys.has(need.key),
+      rejection: plannedNeedKeys.has(need.key) ? null : rejectionDiagnostics.get(need.key) || null,
+      diagnostics: { attempts: diagnosticsByNeed.get(need.key) || [] }
     }))
   };
 

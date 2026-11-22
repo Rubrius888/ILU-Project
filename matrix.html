@@ -63,6 +63,10 @@
       Журнал расстановки
     </button>
 
+    <button class="tab" onclick="openTab(event, 'placementAging')">
+      Устаревание постановок
+    </button>
+
     <button class="tab" onclick="openTab(event, 'processChanges')">
       Изменения процессов
     </button>
@@ -703,6 +707,41 @@
     </div>
   </div>
 
+  <div id="placementAging" class="tab-content">
+    <section class="stats-panel placement-aging-panel">
+      <div class="stats-panel-heading">
+        <h3>Устаревание постановок</h3>
+      </div>
+      <div class="placement-aging-toolbar">
+        <label for="placementAgingPost">Пост</label>
+        <select id="placementAgingPost"><option value="">Все посты</option></select>
+        <label for="placementAgingOperator">Оператор</label>
+        <input id="placementAgingOperator" type="search" placeholder="Поиск по имени">
+      </div>
+      <div class="placement-aging-counts" aria-live="polite">
+        <span class="placement-aging-red">Красные <strong data-aging-count="red">0</strong></span>
+        <span class="placement-aging-yellow">Жёлтые <strong data-aging-count="yellow">0</strong></span>
+        <span class="placement-aging-green">Зелёные <strong data-aging-count="green">0</strong></span>
+      </div>
+      <p id="placementAgingDiagnostics" class="placement-aging-diagnostics" hidden></p>
+      <div class="placement-aging-table-container">
+        <table class="placement-aging-table" aria-label="Устаревание постановок">
+          <thead>
+            <tr>
+              <th scope="col">Пост</th>
+              <th scope="col">Оператор</th>
+              <th scope="col">Уровень квалификации</th>
+              <th scope="col">Последняя постановка</th>
+              <th scope="col">Рабочих дней с последней постановки</th>
+              <th scope="col">Статус</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
   <div id="training" class="tab-content">
     <div class="section-toolbar">
       <div class="add-buttons-top">
@@ -979,6 +1018,8 @@
 <script src="storage.js"></script>
 <script src="app-state.js"></script>
 <script src="stats-module.js"></script>
+<script src="placement-aging-module.js"></script>
+
 <script src="placement-module.js"></script>
 <script src="training-module.js"></script>
 <script src="plans-module.js"></script>
