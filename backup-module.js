@@ -215,22 +215,49 @@ function createApplicationBackup() {
   };
 }
 
-function getBackupFileName(prefix = 'ilu-se4-backup') {
-  const now = new Date();
+const backupFileNameCounts = new Map();
+
+function getBackupFileName(backup) {
+  const filters = backup?.state?.filters || {};
+  const fields = [
+    ['department', 'департамент'],
+    ['section', 'участок'],
+    ['shift', 'смена']
+  ];
+  const values = fields.map(([key, label]) => {
+    const value = filters[key];
+    if (typeof value !== 'string' || !value.trim()) {
+      throw new Error(`Не заполнено обязательное поле «${label}» в настройках матрицы.`);
+    }
+    const safe = value.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
+      .replace(/[. ]+$/g, '');
+    if (!safe || !safe.replace(/_/g, '').trim()) {
+      throw new Error(`Поле «${label}» не содержит допустимого названия для файла.`);
+    }
+    return safe;
+  });
+  const now = new Date(backup.exportedAt);
+  if (!Number.isFinite(now.getTime())) {
+    throw new Error('Не определена дата формирования резервной копии.');
+  }
   const pad = value => String(value).padStart(2, '0');
   const stamp = [
-    now.getFullYear(),
+    pad(now.getDate()),
     pad(now.getMonth() + 1),
-    pad(now.getDate())
-  ].join('-') + '_' + [
-    pad(now.getHours()),
-    pad(now.getMinutes())
-  ].join('-');
-
-  return `${prefix}-${stamp}.json`;
+    now.getFullYear()
+  ].join('.');
+  const stem = `${values[0]}_${values[1]}_Смена${values[2]}_${stamp}`;
+  // Preserve full names instead of silently truncating an unusually long label.
+  if (stem.length > 220) {
+    throw new Error('Названия слишком длинные для безопасного имени файла Windows.');
+  }
+  const count = (backupFileNameCounts.get(stem) || 0) + 1;
+  backupFileNameCounts.set(stem, count);
+  return `${stem}${count === 1 ? '' : `_${count}`}.json`;
 }
 
-function downloadBackup(backup, prefix) {
+function downloadBackup(backup) {
+  const fileName = getBackupFileName(backup);
   const blob = new Blob(
     [JSON.stringify(backup, null, 2)],
     { type: 'application/json;charset=utf-8' }
@@ -239,7 +266,7 @@ function downloadBackup(backup, prefix) {
   const link = document.createElement('a');
 
   link.href = url;
-  link.download = getBackupFileName(prefix);
+  link.download = fileName;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -247,14 +274,11 @@ function downloadBackup(backup, prefix) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function exportApplicationBackup(options = {}) {
+function exportApplicationBackup() {
   try {
     const backup = createApplicationBackup();
 
-    downloadBackup(
-      backup,
-      options.prefix || 'ilu-se4-backup'
-    );
+    downloadBackup(backup);
 
     alert('Резервная копия базы сохранена в загрузки браузера.');
   } catch (error) {
@@ -315,6 +339,11 @@ async function chooseBackupDirectory() {
 
 async function saveBackupToDirectory(options = {}) {
   try {
+    // Coordinate the existence check and file creation across browser tabs.
+    if (typeof navigator !== 'undefined' && navigator.locks && !options.fileNameLocked) {
+      return await navigator.locks.request('ilu-json-backup-filename', () =>
+        saveBackupToDirectory({ ...options, fileNameLocked: true }));
+    }
     if (typeof window.showDirectoryPicker !== 'function') throw new Error('File System Access API недоступен');
     let directory = await getBackupDirectoryHandle();
     if (!directory) {
@@ -332,7 +361,7 @@ async function saveBackupToDirectory(options = {}) {
     }
     if (permission !== 'granted') throw new Error('Доступ к выбранной папке не предоставлен');
     const backup = createApplicationBackup();
-    const baseName = getBackupFileName('ilu-se4-backup');
+    const baseName = getBackupFileName(backup);
     const dot = baseName.lastIndexOf('.');
     const stem = dot > 0 ? baseName.slice(0, dot) : baseName;
     const ext = dot > 0 ? baseName.slice(dot) : '.json';
@@ -456,7 +485,7 @@ async function importApplicationBackup(event) {
 
     // Защитная копия обязательна: при ошибке её формирования импорт не продолжается.
     const protectiveBackup = createApplicationBackup();
-    downloadBackup(protectiveBackup, 'ilu-se4-before-import');
+    downloadBackup(protectiveBackup);
 
     const keys = getApplicationStorageKeys();
     const previousState = localStorage.getItem(keys.state);
