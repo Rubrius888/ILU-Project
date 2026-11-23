@@ -38,6 +38,14 @@
     </div>
   </div>
 
+  <aside id="cloudConnectionBanner" class="cloud-connection-banner" role="alert" aria-atomic="true" hidden data-no-print>
+    <svg class="cloud-connection-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M17 45a12 12 0 0 1-4-23 20 20 0 0 1 37-2 13 13 0 0 1 3 25H29"/>
+      <path d="M8 7 57 56"/>
+    </svg>
+    <div><strong id="cloudConnectionTitle">ОБЛАЧНОЕ СОЕДИНЕНИЕ ПОТЕРЯНО</strong><p id="cloudConnectionCount" hidden></p></div>
+  </aside>
+
   <div class="tabs">
     <button class="tab active" onclick="openTab(event, 'matrix')">
       Матрица ILU
@@ -270,6 +278,23 @@
 </div>
 
   </div>
+
+  <details id="cloudBackupPanel" class="cloud-backup-panel" data-no-print>
+    <summary>Облачное резервное копирование · пилот «Сборка»</summary>
+    <p>Отправка только в рабочую папку «Архив ILU/Сборка».</p>
+    <p>Аккаунт: <span id="cloudAccount">не подключён</span> · Департамент: <span id="cloudDepartment">—</span></p>
+    <p role="status" id="cloudStatus">Подготовка очереди…</p>
+    <p id="cloudAuthDetails"></p>
+    <p>Последняя успешная отправка: <span id="cloudLastSuccess">—</span></p>
+    <p id="cloudError" role="alert"></p>
+    <button type="button" class="btn-small" id="cloudConnect">Подключить Яндекс Диск</button>
+    <label id="cloudCodeLabel" hidden>Одноразовый код Яндекса
+      <input id="cloudCode" type="password" autocomplete="off">
+      <button type="button" class="btn-small" id="cloudAuthorize">Подтвердить код</button>
+    </label>
+    <button type="button" class="btn-small" id="cloudRetry">Повторить отправку</button>
+    <button type="button" class="btn-small" id="cloudDisconnect">Отключить аккаунт</button>
+  </details>
 
   <div id="matrix" class="tab-content active">
 
@@ -1031,6 +1056,7 @@
 <script src="plans-storage.js"></script>
 <script src="excel-export.js"></script>
 <script src="backup-module.js"></script>
+<script src="cloud-backup.js"></script>
 
 </body>
 </html>

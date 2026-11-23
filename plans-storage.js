@@ -185,8 +185,11 @@ function getDevelopmentSnapshot(year, month) {
 function savePlans() {
   try {
     localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify(savedPlans));
+    try { window.cloudBackup?.notifySaved(); } catch (_) { /* Local plans are already saved. */ }
+    return true;
   } catch (error) {
     console.error('Не удалось сохранить планинги:', error);
+    return false;
   }
 }
 

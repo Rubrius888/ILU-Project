@@ -47,6 +47,8 @@ function saveState() {
       JSON.stringify(state)
     );
 
+    try { window.cloudBackup?.notifySaved(); } catch (_) { /* Cloud cannot block local saving. */ }
+
     return true;
   } catch (error) {
     console.error(

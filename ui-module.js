@@ -752,6 +752,14 @@ function renderOrganizationFilters() {
   const shop = document.getElementById('filterWorkshop');
   const section = document.getElementById('filterSection');
   if (!dep || !shop || !section) return;
+  const storedDepartment = filterState.department;
+  if (storedDepartment && !organizationStructure.some(item => item.name === storedDepartment)) {
+    dep.replaceChildren(...organizationStructure.map(item => new Option(item.name, item.name)),
+      new Option(storedDepartment, storedDepartment, true, true));
+    shop.replaceChildren(...(filterState.workshop ? [new Option(filterState.workshop)] : []));
+    section.replaceChildren(...(filterState.section ? [new Option(filterState.section)] : []));
+    return;
+  }
   normalizeOrganizationSelection();
   const department = getOrganizationDepartment(filterState.department);
   filterState.department = department.name;

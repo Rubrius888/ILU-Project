@@ -187,7 +187,7 @@ function createApplicationBackup() {
   }
 
   if (typeof savePlans === 'function') {
-    savePlans();
+    if (savePlans() === false) throw new Error('Не удалось сохранить текущие планы');
   }
 
   const keys = getApplicationStorageKeys();
@@ -217,7 +217,7 @@ function createApplicationBackup() {
 
 const backupFileNameCounts = new Map();
 
-function getBackupFileName(backup) {
+function getBackupFileName(backup, options = {}) {
   const filters = backup?.state?.filters || {};
   const fields = [
     ['department', 'департамент'],
@@ -251,15 +251,16 @@ function getBackupFileName(backup) {
   if (stem.length > 220) {
     throw new Error('Названия слишком длинные для безопасного имени файла Windows.');
   }
-  const count = (backupFileNameCounts.get(stem) || 0) + 1;
-  backupFileNameCounts.set(stem, count);
+  const count = options.reserve === false ? 1 : (backupFileNameCounts.get(stem) || 0) + 1;
+  if (options.reserve !== false) backupFileNameCounts.set(stem, count);
   return `${stem}${count === 1 ? '' : `_${count}`}.json`;
 }
 
 function downloadBackup(backup) {
   const fileName = getBackupFileName(backup);
+  const text = JSON.stringify(backup, null, 2);
   const blob = new Blob(
-    [JSON.stringify(backup, null, 2)],
+    [text],
     { type: 'application/json;charset=utf-8' }
   );
   const url = URL.createObjectURL(blob);
@@ -270,6 +271,8 @@ function downloadBackup(backup) {
   document.body.appendChild(link);
   link.click();
   link.remove();
+
+  try { window.cloudBackup?.offer(backup, text, fileName); } catch (_) { /* Independent cloud queue. */ }
 
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
@@ -362,6 +365,7 @@ async function saveBackupToDirectory(options = {}) {
     if (permission !== 'granted') throw new Error('Доступ к выбранной папке не предоставлен');
     const backup = createApplicationBackup();
     const baseName = getBackupFileName(backup);
+    const text = JSON.stringify(backup, null, 2);
     const dot = baseName.lastIndexOf('.');
     const stem = dot > 0 ? baseName.slice(0, dot) : baseName;
     const ext = dot > 0 ? baseName.slice(dot) : '.json';
@@ -378,8 +382,9 @@ async function saveBackupToDirectory(options = {}) {
     }
     const file = await directory.getFileHandle(fileName, { create: true });
     const writable = await file.createWritable({ keepExistingData: false });
-    await writable.write(JSON.stringify(backup, null, 2));
+    await writable.write(text);
     await writable.close();
+    try { window.cloudBackup?.offer(backup, text, fileName); } catch (_) { /* Independent cloud queue. */ }
     localStorage.setItem(LAST_FOLDER_BACKUP_KEY, new Date().toISOString());
     if (!options.silent) alert('Резервная копия сохранена в выбранную папку.');
     return true;
